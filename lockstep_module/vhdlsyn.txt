@@ -1,0 +1,4 @@
+slack/slack_handler.vhd
+comparator/comparator.vhd
+lockstep_pkg.vhd
+apb_lockstep.vhd
