@@ -1,5 +1,7 @@
 library ieee; 
 use ieee.std_logic_1164.all;
+use ieee.numeric_std.all;
+use ieee.math_real.all;
 library gaisler; 
 use gaisler.misc.all;
 library grlib;
@@ -16,8 +18,11 @@ entity apb_lockstep is
         paddr  : integer := 0;
         pmask  : integer := 16#fff#;
         -- comparator genercis
-        min_slack  : integer := 1000;  -- Number of cycles that the core is going to be stalled
-        max_slack  : integer := 1000   -- When one core is 'max_instructions_differece" instrucctions ahead of the other, it is stalled.
+        min_slack_init  : integer := 100;  -- Number of cycles that the core is going to be stalled
+        max_slack_init  : integer := 500;  -- When one core is 'max_instructions_differece" instrucctions ahead of the other, it is stalled
+        -- config
+        activate_slack      : integer := 1;          -- It activates the module that controls the max and min instruction that one core is ahead of the other
+        activate_comparator : integer := 1           -- It activates the module that compares results between both cores
     );
     port (
         -- apb signals
@@ -40,6 +45,9 @@ entity apb_lockstep is
 
 architecture rtl of apb_lockstep is
 
+    constant REGISTERS_NUMBER : integer := 3;
+    constant SLAVE_INDEX_CEIL : integer := integer(ceil(log2(real(REGISTERS_NUMBER))));
+
     constant REVISION  : integer := 0;
     constant VENDOR_ID : integer := 16#0e#;
     constant DEVICE_ID : integer := 16#002#;
@@ -47,57 +55,62 @@ architecture rtl of apb_lockstep is
     constant PCONFIG : apb_config_type := (
     0 => ahb_device_reg (VENDOR_ID, DEVICE_ID, 0, REVISION, 0),
     1 => apb_iobar(paddr, pmask));
-    type registers is record
-        reg : std_logic_vector(31 downto 0);
-    end record;
-    signal r, rin : registers;
+    signal r, rin : registers_vector(SLAVE_INDEX_CEIL-1 downto 0) ;
     signal enable_comparator : std_logic;
 
 begin
-    slack_handler_inst : slack_handler 
-    generic map(
-        min_slack => min_slack,
-        max_slack => max_slack
-        )
-    port map(
-        clk     => clk,
-        rstn    => rst, 
-        enable  => enable_comparator,
-        icnt1   => icnt1,
-        icnt2   => icnt2,
-        stall1  => stall1, 
-        stall2  => stall2
-        );
+    SLACK: if activate_slack = 1 generate
+        slack_handler_inst : slack_handler 
+        generic map(
+            min_slack_init => min_slack_init,
+            max_slack_init => max_slack_init,
+            SLAVE_INDEX_CEIL => SLAVE_INDEX_CEIL 
+            )
+        port map(
+            clk     => clk,
+            rstn    => rst, 
+            icnt1   => icnt1,
+            icnt2   => icnt2,
+            stall1  => stall1, 
+            stall2  => stall2,
+            regs    => r
+            );
+    end generate SLACK;
 
-    comparator_inst : comparator
-    port map(
-        clk           => clk,
-        rstn          => rst, 
-        enable        => enable_comparator,
-        alu1          => alu1, 
-        alu2          => alu2, 
-        pc1           => pc1, 
-        pc2           => pc2, 
-        reset_program => reset_program
-        );
+    COMP: if activate_comparator = 1 generate
+        comparator_inst : comparator
+        port map(
+            clk           => clk,
+            rstn          => rst, 
+            enable        => enable_comparator,
+            alu1          => alu1, 
+            alu2          => alu2, 
+            pc1           => pc1, 
+            pc2           => pc2, 
+            reset_program => reset_program
+            );
+    end generate COMP;
 
     comb : process(rst, r, apbi)
         variable readdata : std_logic_vector(31 downto 0);
-        variable v        : registers;
+        variable v        : registers_vector(SLAVE_INDEX_CEIL-1 downto 0);
+        variable slave_index : std_logic_vector(1 downto 0);
     begin
         v := r;
+        -- select slave
+        slave_index := apbi.paddr(SLAVE_INDEX_CEIL+1 downto 2);
         -- read register
         readdata := (others => '0');
         if (apbi.psel(pindex) and apbi.penable) = '1' and apbi.pwrite = '0' then
-            readdata := r.reg(31 downto 0);
+            readdata := r(to_integer(unsigned(slave_index)));
         end if;
         -- write registers
-        if (apbi.psel(pindex) and apbi.penable and apbi.pwrite) = '1' then
-            v.reg := apbi.pwdata;
+        if (apbi.psel(pindex) and apbi.pwrite) = '1' then
+            v(to_integer(unsigned(slave_index))) := apbi.pwdata;
         end if;
         -- system reset
         if rst = '0' then
-            v.reg := (others => '0');
+            v := (others => (others => '0'));
         end if;
         rin <= v;
         apbo.prdata <= readdata; -- drive apb read bus
@@ -116,14 +129,4 @@ begin
         if rising_edge(clk) then r <= rin; end if;
     end process;
 
-    -- calculate enable 
-    process(r)
-        variable ored_bits : std_logic;
-    begin
-        ored_bits := r.reg(0) or r.reg(1);
-        for index in 2 to 31 loop
-            ored_bits := ored_bits or r.reg(index);
-        end loop; 
-        enable_comparator <= ored_bits;
-    end process;
 end;

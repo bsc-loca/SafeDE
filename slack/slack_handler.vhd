@@ -17,17 +17,21 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 use ieee.math_real.all;
 
+library bsc;
+use bsc.lockstep_pkg.all;
+
 entity slack_handler is
   generic(
-    min_slack  : integer := 1000;  -- Number of cycles that the core is going to be stalled
-    max_slack  : integer := 1000   -- When one core is 'max_instructions_differece" instrucctions ahead of the other, it is stalled.
+    min_slack_init   : integer := 100;  -- Number of cycles that the core is going to be stalled
+    max_slack_init   : integer := 500;  -- When one core is 'max_instructions_differece" instrucctions ahead of the other, it is stalled.
+    SLAVE_INDEX_CEIL : integer := 3     -- Number of registers
     );  
   port(
     clk            : in  std_logic;                      
     rstn           : in  std_logic;
-    enable         : in  std_logic;                       -- Enables the module
     icnt1          : in  std_logic_vector(1 downto 0);    -- Instruction counter from the first core
     icnt2          : in  std_logic_vector(1 downto 0);    -- Instruction counter from the second core
+    regs           : in  registers_vector(SLAVE_INDEX_CEIL-1 downto 0); -- Registers of the module 
     stall1         : out std_logic;                       -- Signal to stall the first core
     stall2         : out std_logic                        -- Signal to stall the second core
     );  
@@ -42,8 +46,7 @@ architecture rtl of slack_handler is
 
     -- Signals to compare executed instructions of both cores
     signal   core1_ahead_core2             : std_logic;
-    constant instruction_difference_length : integer := integer(ceil(log2(real(max_slack))));
-    signal   instructions_difference       : unsigned(instruction_difference_length downto 0);   -- It should be intruction_difference_length-1 but this value can be bigger than the limit
+    signal   instructions_difference       : unsigned(14 downto 0);   -- It should be intruction_difference_length-1 but this value can be bigger than the limit
 
 
     -- Signals to implement the FSM to stall a core
@@ -57,7 +60,21 @@ architecture rtl of slack_handler is
     -- Signals to count the number of cycles that one core has been stalled
     signal cycles_stalled : unsigned(127 downto 0); 
 
+    -- Enable signal
+    signal enable : std_logic;
+
+    -- Max and min slack
+    signal max_slack : unsigned(14 downto 0);
+    signal min_slack : unsigned(14 downto 0);
+
 begin 
+
+    -- Enable module and min and max slack
+    enable <= regs(0)(0); 
+    max_slack <= unsigned(regs(0)(30 downto 16)) when unsigned(regs(0)(30 downto 16)) /= 0 else
+                 to_unsigned(max_slack_init, 15);
+    min_slack <= unsigned(regs(0)(15 downto  1)) when unsigned(regs(0)(15 downto  1)) /= 0 else
+                 to_unsigned(min_slack_init, 15);
 
     -- Calculate the number o executed instructions for both cores using the insturction counter
     -- intruction counter icnt has a bit per lane (both bits)
@@ -101,8 +118,8 @@ begin
     core1_ahead_core2 <= '1' when executed_inst1 >= executed_inst2 else
                           '0';
 
-    instructions_difference <= executed_inst1(instruction_difference_length downto 0) - executed_inst2(instruction_difference_length downto 0) when core1_ahead_core2 = '1' else
-                               executed_inst2(instruction_difference_length downto 0) - executed_inst1(instruction_difference_length downto 0); 
+    instructions_difference <= executed_inst1(14 downto 0) - executed_inst2(14 downto 0) when core1_ahead_core2 = '1' else
+                               executed_inst2(14 downto 0) - executed_inst1(14 downto 0); 
 
 
 

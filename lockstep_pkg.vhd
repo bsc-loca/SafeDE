@@ -7,17 +7,25 @@ use grlib.amba.all;
 
 package lockstep_pkg is
 
+    -- Types definitions
+
+    type registers_vector is array (integer range <>) of std_logic_vector(31 downto 0);
+
+
+    -- Components definitions 
+
     component slack_handler is
         generic (
-            min_slack  : integer := 100;  -- Minimum difference of instrucctions between both cores
-            max_slack  : integer := 500   -- Maximum difference of instrucctions between both cores
+            min_slack_init   : integer := 100;    -- Minimum difference of instrucctions between both cores
+            max_slack_init   : integer := 500;    -- Maximum difference of instrucctions between both cores
+            SLAVE_INDEX_CEIL : integer := 3       -- Number of registers
         );
         port (
             clk            : in  std_logic;    
             rstn           : in  std_logic;
-            enable         : in  std_logic;                       -- Enables the module 
             icnt1          : in  std_logic_vector(1 downto 0);    -- Instruction counter from the first core
             icnt2          : in  std_logic_vector(1 downto 0);    -- Instruction counter from the second core
+            regs           : in  registers_vector(SLAVE_INDEX_CEIL-1 downto 0); -- Registers of the module 
             stall1         : out std_logic;                       -- Signal to stall the first core
             stall2         : out std_logic                        -- Signal to stall the second core
         );
@@ -44,8 +52,12 @@ package lockstep_pkg is
             paddr  : integer := 0;
             pmask  : integer := 16#fff#;
             -- comparator genercis
-            min_slack  : integer := 1000;  -- Number of cycles that the core is going to be stalled
-            max_slack  : integer := 1000   -- When one core is 'max_instructions_differece" instrucctions ahead of the other, it is stalled.
+            min_slack_init  : integer := 500;  -- Number of cycles that the core is going to be stalled
+            max_slack_init  : integer := 100;  -- When one core is 'max_instructions_differece" instrucctions ahead of the other, it is stalled.
+            -- config
+            activate_slack      : integer := 1;          -- It activates the module that controls the max and min instruction that one core is ahead of the other.
+            activate_comparator : integer := 1           -- It activates the module that compares results between both cores
+
         );
         port (
             -- apb signals
