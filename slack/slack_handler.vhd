@@ -24,14 +24,14 @@ entity slack_handler is
   generic(
     min_slack_init   : integer := 100;  -- Number of cycles that the core is going to be stalled
     max_slack_init   : integer := 500;  -- When one core is 'max_instructions_differece" instrucctions ahead of the other, it is stalled.
-    SLAVE_INDEX_CEIL : integer := 3     -- Number of registers
+    REGISTERS_NUMBER : integer := 3     -- Number of registers
     );  
   port(
     clk            : in  std_logic;                      
     rstn           : in  std_logic;
     icnt1          : in  std_logic_vector(1 downto 0);    -- Instruction counter from the first core
     icnt2          : in  std_logic_vector(1 downto 0);    -- Instruction counter from the second core
-    regs           : in  registers_vector(SLAVE_INDEX_CEIL-1 downto 0); -- Registers of the module 
+    regs           : in  registers_vector(REGISTERS_NUMBER-1 downto 0); -- Registers of the module 
     stall1         : out std_logic;                       -- Signal to stall the first core
     stall2         : out std_logic                        -- Signal to stall the second core
     );  

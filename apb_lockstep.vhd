@@ -45,8 +45,8 @@ entity apb_lockstep is
 
 architecture rtl of apb_lockstep is
 
-    constant REGISTERS_NUMBER : integer := 3;
-    constant SLAVE_INDEX_CEIL : integer := integer(ceil(log2(real(REGISTERS_NUMBER))));
+    constant REGISTERS_NUMBER : integer := 2; -- minimum 2
+    constant SLV_INDEX_CEIL : integer := integer(ceil(log2(real(REGISTERS_NUMBER))));
 
     constant REVISION  : integer := 0;
     constant VENDOR_ID : integer := 16#0e#;
@@ -55,7 +55,7 @@ architecture rtl of apb_lockstep is
     constant PCONFIG : apb_config_type := (
     0 => ahb_device_reg (VENDOR_ID, DEVICE_ID, 0, REVISION, 0),
     1 => apb_iobar(paddr, pmask));
-    signal r, rin : registers_vector(SLAVE_INDEX_CEIL-1 downto 0) ;
+    signal r, rin : registers_vector(REGISTERS_NUMBER-1 downto 0) ;
     signal enable_comparator : std_logic;
 
 begin
@@ -64,7 +64,7 @@ begin
         generic map(
             min_slack_init => min_slack_init,
             max_slack_init => max_slack_init,
-            SLAVE_INDEX_CEIL => SLAVE_INDEX_CEIL 
+            REGISTERS_NUMBER => REGISTERS_NUMBER 
             )
         port map(
             clk     => clk,
@@ -93,12 +93,12 @@ begin
 
     comb : process(rst, r, apbi)
         variable readdata : std_logic_vector(31 downto 0);
-        variable v        : registers_vector(SLAVE_INDEX_CEIL-1 downto 0);
-        variable slave_index : std_logic_vector(1 downto 0);
+        variable v        : registers_vector(REGISTERS_NUMBER-1 downto 0);
+        variable slave_index : std_logic_vector(SLV_INDEX_CEIL-1 downto 0);
     begin
         v := r;
         -- select slave
-        slave_index := apbi.paddr(SLAVE_INDEX_CEIL+1 downto 2);
+        slave_index := apbi.paddr(SLV_INDEX_CEIL+1 downto 2);
         -- read register
         readdata := (others => '0');
         if (apbi.psel(pindex) and apbi.penable) = '1' and apbi.pwrite = '0' then
