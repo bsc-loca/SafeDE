@@ -2,3 +2,4 @@ lockstep_pkg.vhd
 comparator/comparator.vhd
 slack/slack_handler.vhd
 apb_lockstep.vhd
+lockstep_top_component.vhd

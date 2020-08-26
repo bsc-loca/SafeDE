@@ -2,8 +2,8 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 use ieee.math_real.all;
-library gaisler; 
-use gaisler.misc.all;
+--library gaisler; 
+--use gaisler.misc.all;
 library grlib;
 use grlib.amba.all;
 use grlib.devices.all;
@@ -30,7 +30,7 @@ entity apb_lockstep is
         clk            : in  std_ulogic;
         apbi           : in  apb_slv_in_type;
         apbo           : out apb_slv_out_type;
-        -- comparator signals 
+        -- lockstep signals 
         icnt1          : in  std_logic_vector(1 downto 0);    -- Instruction counter from the first core
         icnt2          : in  std_logic_vector(1 downto 0);    -- Instruction counter from the second core
         alu1           : in  std_logic_vector(63 downto 0);   -- Result from the first core ALU 
@@ -45,7 +45,7 @@ entity apb_lockstep is
 
 architecture rtl of apb_lockstep is
 
-    constant REGISTERS_NUMBER : integer := 2; -- minimum 2
+    constant REGISTERS_NUMBER : integer := 3; -- minimum 2
     constant SLV_INDEX_CEIL : integer := integer(ceil(log2(real(REGISTERS_NUMBER))));
 
     constant REVISION  : integer := 0;
@@ -55,7 +55,8 @@ architecture rtl of apb_lockstep is
     constant PCONFIG : apb_config_type := (
     0 => ahb_device_reg (VENDOR_ID, DEVICE_ID, 0, REVISION, 0),
     1 => apb_iobar(paddr, pmask));
-    signal r, rin : registers_vector(REGISTERS_NUMBER-1 downto 0) ;
+
+    signal r, rin, regs_slack : registers_vector(REGISTERS_NUMBER-1 downto 0) ;
     signal enable_comparator : std_logic;
 
 begin
@@ -67,13 +68,14 @@ begin
             REGISTERS_NUMBER => REGISTERS_NUMBER 
             )
         port map(
-            clk     => clk,
-            rstn    => rst, 
-            icnt1   => icnt1,
-            icnt2   => icnt2,
-            stall1  => stall1, 
-            stall2  => stall2,
-            regs    => r
+            clk      => clk,
+            rstn     => rst, 
+            icnt1    => icnt1,
+            icnt2    => icnt2,
+            stall1   => stall1, 
+            stall2   => stall2,
+            regs_in  => r,
+            regs_out => regs_slack
             );
     end generate SLACK;
 
@@ -91,7 +93,7 @@ begin
             );
     end generate COMP;
 
-    comb : process(rst, r, apbi)
+    comb : process(rst, r, apbi, regs_slack)
         variable readdata : std_logic_vector(31 downto 0);
         variable v        : registers_vector(REGISTERS_NUMBER-1 downto 0);
         variable slave_index : std_logic_vector(SLV_INDEX_CEIL-1 downto 0);
@@ -104,15 +106,16 @@ begin
         if (apbi.psel(pindex) and apbi.penable) = '1' and apbi.pwrite = '0' then
             readdata := r(to_integer(unsigned(slave_index)));
         end if;
-        -- write registers
-        if (apbi.psel(pindex) and apbi.pwrite) = '1' then
+        -- write registers (only the first one so far)
+        if (apbi.psel(pindex) and apbi.pwrite) = '1' and unsigned(slave_index) = 0 then
             v(to_integer(unsigned(slave_index))) := apbi.pwdata;
         end if;
         -- system reset
         if rst = '0' then
             v := (others => (others => '0'));
         end if;
-        rin <= v;
+        rin <= regs_slack;
+        rin(0) <= v(0);
         apbo.prdata <= readdata; -- drive apb read bus
     end process;
     

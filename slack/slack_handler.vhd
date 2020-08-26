@@ -22,7 +22,7 @@ use bsc.lockstep_pkg.all;
 
 entity slack_handler is
   generic(
-    min_slack_init   : integer := 100;  -- Number of cycles that the core is going to be stalled
+    min_slack_init   : integer := 100;  -- 
     max_slack_init   : integer := 500;  -- When one core is 'max_instructions_differece" instrucctions ahead of the other, it is stalled.
     REGISTERS_NUMBER : integer := 3     -- Number of registers
     );  
@@ -31,7 +31,8 @@ entity slack_handler is
     rstn           : in  std_logic;
     icnt1          : in  std_logic_vector(1 downto 0);    -- Instruction counter from the first core
     icnt2          : in  std_logic_vector(1 downto 0);    -- Instruction counter from the second core
-    regs           : in  registers_vector(REGISTERS_NUMBER-1 downto 0); -- Registers of the module 
+    regs_in        : in  registers_vector(REGISTERS_NUMBER-1 downto 0); -- Registers of the module (in)
+    regs_out       : out registers_vector(REGISTERS_NUMBER-1 downto 0); -- Registers of the module (out) 
     stall1         : out std_logic;                       -- Signal to stall the first core
     stall2         : out std_logic                        -- Signal to stall the second core
     );  
@@ -58,7 +59,7 @@ architecture rtl of slack_handler is
     signal counter_times_stalled : unsigned(31 downto 0);
 
     -- Signals to count the number of cycles that one core has been stalled
-    signal cycles_stalled : unsigned(127 downto 0); 
+    signal cycles_stalled : unsigned(31 downto 0); 
 
     -- Enable signal
     signal enable : std_logic;
@@ -70,10 +71,10 @@ architecture rtl of slack_handler is
 begin 
 
     -- Enable module and min and max slack
-    enable <= regs(0)(0); 
-    max_slack <= unsigned(regs(0)(30 downto 16)) when unsigned(regs(0)(30 downto 16)) /= 0 else
+    enable <= regs_in(0)(0); 
+    max_slack <= unsigned(regs_in(0)(30 downto 16)) when unsigned(regs_in(0)(30 downto 16)) /= 0 else
                  to_unsigned(max_slack_init, 15);
-    min_slack <= unsigned(regs(0)(15 downto  1)) when unsigned(regs(0)(15 downto  1)) /= 0 else
+    min_slack <= unsigned(regs_in(0)(15 downto  1)) when unsigned(regs_in(0)(15 downto  1)) /= 0 else
                  to_unsigned(min_slack_init, 15);
 
     -- Calculate the number o executed instructions for both cores using the insturction counter
@@ -97,13 +98,22 @@ begin
 
     -- If both bits are equal instruction counter does not increment if both are different it increments
     -- by two, if only one is different it increments by one.
-    increment1 <= to_unsigned(0, 2) when icnt1 = next_icnt1 else
-                  to_unsigned(2, 2) when icnt1(0) /= next_icnt1(0) and icnt1(1) /= next_icnt1(1) else
-                  to_unsigned(1, 2);
+    -- increment1 <= to_unsigned(0, 2) when icnt1 = next_icnt1 else
+    --               to_unsigned(2, 2) when icnt1(0) /= next_icnt1(0) and icnt1(1) /= next_icnt1(1) else
+    --               to_unsigned(1, 2);
 
-    increment2 <= to_unsigned(0, 2) when icnt2 = next_icnt2 else
-                  to_unsigned(2, 2) when icnt2(0) /= next_icnt2(0) and icnt2(1) /= next_icnt2(1) else
-                  to_unsigned(1, 2);
+    -- increment2 <= to_unsigned(0, 2) when icnt2 = next_icnt2 else
+    --               to_unsigned(2, 2) when icnt2(0) /= next_icnt2(0) and icnt2(1) /= next_icnt2(1) else
+    --               to_unsigned(1, 2);
+
+    increment1 <= to_unsigned(2, 2)  when icnt1(0) = '1' and next_icnt1(0) = '0' and icnt1(1) = '1' and next_icnt1(1) = '0' else
+                  to_unsigned(1, 2)  when (icnt1(0) = '1' and next_icnt1(0) = '0') or (icnt1(1) = '1' and next_icnt1(1) = '0') else
+                  to_unsigned(0, 2);
+
+    increment2 <= to_unsigned(2, 2)  when icnt2(0) = '1' and next_icnt2(0) = '0' and icnt2(1) = '1' and next_icnt2(1) = '0' else
+                  to_unsigned(1, 2)  when (icnt2(0) = '1' and next_icnt2(0) = '0') or (icnt2(1) = '1' and next_icnt2(1) = '0') else
+                  to_unsigned(0, 2);
+
 
     n_executed_inst1 <= executed_inst1 + increment1 when enable = '1' else
                         (others => '0');
@@ -185,7 +195,15 @@ begin
                 end if;
         end case;
     end process;
-    
+
+
+    -- pass back the value of the internal registers
+    process(regs_in, counter_times_stalled, cycles_stalled)
+    begin
+        regs_out    <= regs_in;
+        regs_out(1) <= std_logic_vector(counter_times_stalled);
+        regs_out(2) <= std_logic_vector(cycles_stalled);
+    end process;
 
 end;
 
