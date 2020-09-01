@@ -7,7 +7,7 @@ use grlib.amba.all;
 
 
 package lockstep_top_component is
-     component apb_lockstep is
+     component apb_wrapper_lockstep is
         generic (
             -- apb generics
             pindex : integer := 0;
@@ -38,6 +38,6 @@ package lockstep_top_component is
             stall2        : out std_logic;                       -- Signal to stall the second core
             reset_program : out std_logic                        -- Reset the program if the result of both ALUs does not match
         );
-    end component apb_lockstep; 
+    end component apb_wrapper_lockstep; 
 
 end lockstep_top_component;

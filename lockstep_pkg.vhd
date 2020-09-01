@@ -11,6 +11,37 @@ package lockstep_pkg is
 
 
     -- Components definitions 
+    component apb_lockstep is
+        generic (
+            -- comparator genercis
+            min_slack_init  : integer := 100;  -- Number of cycles that the core is going to be stalled
+            max_slack_init  : integer := 500;  -- When one core is 'max_instructions_differece" instrucctions ahead of the other, it is stalled
+            -- config
+            activate_slack      : integer := 1;          -- It activates the module that controls the max and min instruction that one core is ahead of the other
+            activate_comparator : integer := 1           -- It activates the module that compares results between both cores
+        );  
+        port (
+            rst            : in  std_ulogic;
+            clk            : in  std_ulogic;
+            -- apb signals
+            apbi_psel      : in  std_logic;    
+            apbi_paddr     : in  std_logic_vector(31 downto 0);    
+            apbi_penable   : in  std_logic;    
+            apbi_pwrite    : in  std_logic;    
+            apbi_pwdata    : in  std_logic_vector(31 downto 0);    
+            apbo_prdata    : out std_logic_vector(31 downto 0);    
+            -- lockstep signals 
+            icnt1          : in  std_logic_vector(1 downto 0);    -- Instruction counter from the first core
+            icnt2          : in  std_logic_vector(1 downto 0);    -- Instruction counter from the second core
+            alu1           : in  std_logic_vector(63 downto 0);   -- Result from the first core ALU 
+            alu2           : in  std_logic_vector(63 downto 0);   -- Result from the second core ALU 
+            pc1            : in  std_logic_vector(63 downto 0);   -- Current PC of the first core
+            pc2            : in  std_logic_vector(63 downto 0);   -- Current PC of the second core
+            stall1         : out std_logic;                       -- Signal to stall the first core
+            stall2         : out std_logic;                       -- Signal to stall the second core
+            reset_program  : out std_logic                        -- Reset the program if the result of both ALUs does not match
+        );  
+    end component apb_lockstep;
 
     component slack_handler is
         generic (

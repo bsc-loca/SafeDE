@@ -2,21 +2,12 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 use ieee.math_real.all;
---library gaisler; 
---use gaisler.misc.all;
-library grlib;
-use grlib.amba.all;
-use grlib.devices.all;
 library bsc;
 use bsc.lockstep_pkg.all;
 
 
 entity apb_lockstep is
     generic (
-        -- apb generics
-        pindex : integer := 0;
-        paddr  : integer := 0;
-        pmask  : integer := 16#fff#;
         -- comparator genercis
         min_slack_init  : integer := 100;  -- Number of cycles that the core is going to be stalled
         max_slack_init  : integer := 500;  -- When one core is 'max_instructions_differece" instrucctions ahead of the other, it is stalled
@@ -25,11 +16,15 @@ entity apb_lockstep is
         activate_comparator : integer := 1           -- It activates the module that compares results between both cores
     );
     port (
-        -- apb signals
         rst            : in  std_ulogic;
         clk            : in  std_ulogic;
-        apbi           : in  apb_slv_in_type;
-        apbo           : out apb_slv_out_type;
+        -- apb signals
+        apbi_psel      : in  std_logic;                       
+        apbi_paddr     : in  std_logic_vector(31 downto 0);                      
+        apbi_penable   : in  std_logic;                     
+        apbi_pwrite    : in  std_logic;
+        apbi_pwdata    : in  std_logic_vector(31 downto 0);                   
+        apbo_prdata    : out std_logic_vector(31 downto 0);                  
         -- lockstep signals 
         icnt1          : in  std_logic_vector(1 downto 0);    -- Instruction counter from the first core
         icnt2          : in  std_logic_vector(1 downto 0);    -- Instruction counter from the second core
@@ -41,20 +36,12 @@ entity apb_lockstep is
         stall2         : out std_logic;                       -- Signal to stall the second core
         reset_program  : out std_logic                        -- Reset the program if the result of both ALUs does not match
     );
-    end;
+end;
 
 architecture rtl of apb_lockstep is
 
-    constant REGISTERS_NUMBER : integer := 3; -- minimum 2
+    constant REGISTERS_NUMBER : integer := 6; -- minimum 2
     constant SLV_INDEX_CEIL : integer := integer(ceil(log2(real(REGISTERS_NUMBER))));
-
-    constant REVISION  : integer := 0;
-    constant VENDOR_ID : integer := 16#0e#;
-    constant DEVICE_ID : integer := 16#002#;
-
-    constant PCONFIG : apb_config_type := (
-    0 => ahb_device_reg (VENDOR_ID, DEVICE_ID, 0, REVISION, 0),
-    1 => apb_iobar(paddr, pmask));
 
     signal r, rin, regs_slack : registers_vector(REGISTERS_NUMBER-1 downto 0) ;
     signal enable_comparator : std_logic;
@@ -93,22 +80,22 @@ begin
             );
     end generate COMP;
 
-    comb : process(rst, r, apbi, regs_slack)
+    comb : process(rst, r, apbi_psel, apbi_paddr, apbi_penable, apbi_pwrite, apbi_pwdata, regs_slack)
         variable readdata : std_logic_vector(31 downto 0);
         variable v        : registers_vector(REGISTERS_NUMBER-1 downto 0);
         variable slave_index : std_logic_vector(SLV_INDEX_CEIL-1 downto 0);
     begin
         v := r;
         -- select slave
-        slave_index := apbi.paddr(SLV_INDEX_CEIL+1 downto 2);
+        slave_index := apbi_paddr(SLV_INDEX_CEIL+1 downto 2);
         -- read register
         readdata := (others => '0');
-        if (apbi.psel(pindex) and apbi.penable) = '1' and apbi.pwrite = '0' then
+        if (apbi_psel and apbi_penable) = '1' and apbi_pwrite = '0' then
             readdata := r(to_integer(unsigned(slave_index)));
         end if;
         -- write registers (only the first one so far)
-        if (apbi.psel(pindex) and apbi.pwrite) = '1' and unsigned(slave_index) = 0 then
-            v(to_integer(unsigned(slave_index))) := apbi.pwdata;
+        if (apbi_psel and apbi_pwrite) = '1' and unsigned(slave_index) = 0 then
+            v(to_integer(unsigned(slave_index))) := apbi_pwdata;
         end if;
         -- system reset
         if rst = '0' then
@@ -116,16 +103,9 @@ begin
         end if;
         rin <= regs_slack;
         rin(0) <= v(0);
-        apbo.prdata <= readdata; -- drive apb read bus
+        apbo_prdata <= readdata; -- drive apb read bus
     end process;
     
-    apbo.pirq <= (others => '0');
-    apbo.pindex <= pindex;
-    apbo.pconfig <= PCONFIG;
-    -- No IRQ
-    -- VHDL generic
-    -- Config constant
-    -- registers
 
     regs : process(clk)
     begin

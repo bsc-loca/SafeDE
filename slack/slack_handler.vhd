@@ -39,10 +39,12 @@ entity slack_handler is
 end;
 
 architecture rtl of slack_handler is
+    -- Signal to count the cycles lockstep has been active
+    signal total_cycles: unsigned(31 downto 0);
+
     -- Signals to calculate the number of executed instructions/2 (each PC is two instructions)
     signal executed_inst1, n_executed_inst1 : unsigned(128 downto 0);
     signal executed_inst2, n_executed_inst2 : unsigned(128 downto 0);
-    signal next_icnt1, next_icnt2           : std_logic_vector(1 downto 0);
     signal increment1, increment2           : unsigned (1 downto 0);
 
     -- Signals to compare executed instructions of both cores
@@ -77,7 +79,8 @@ begin
     min_slack <= unsigned(regs_in(0)(15 downto  1)) when unsigned(regs_in(0)(15 downto  1)) /= 0 else
                  to_unsigned(min_slack_init, 15);
 
-    -- Calculate the number o executed instructions for both cores using the insturction counter
+    -- It calculates the number of executed instructions for both cores using the insturction counter
+    -- It also calculates the cycles since lockstep has been enable
     -- intruction counter icnt has a bit per lane (both bits)
     process(clk)
     begin
@@ -85,41 +88,28 @@ begin
             if rstn = '0' then
 	        executed_inst1 <= (others => '0');
 	        executed_inst2 <= (others => '0');
-               	next_icnt1     <= "00";
-	        next_icnt2     <= "00";
+                total_cycles   <= (others => '0');
        	    else
-                next_icnt1  <= icnt1; 
-                next_icnt2  <= icnt2; 
                 executed_inst1 <= n_executed_inst1;
                 executed_inst2 <= n_executed_inst2;
+                if enable = '1' then
+                    total_cycles   <= total_cycles + 1;
+                end if;
             end if;
         end if;   
     end process;
 
-    -- If both bits are equal instruction counter does not increment if both are different it increments
-    -- by two, if only one is different it increments by one.
-    -- increment1 <= to_unsigned(0, 2) when icnt1 = next_icnt1 else
-    --               to_unsigned(2, 2) when icnt1(0) /= next_icnt1(0) and icnt1(1) /= next_icnt1(1) else
-    --               to_unsigned(1, 2);
-
-    -- increment2 <= to_unsigned(0, 2) when icnt2 = next_icnt2 else
-    --               to_unsigned(2, 2) when icnt2(0) /= next_icnt2(0) and icnt2(1) /= next_icnt2(1) else
-    --               to_unsigned(1, 2);
-
-    increment1 <= to_unsigned(2, 2)  when icnt1(0) = '1' and next_icnt1(0) = '0' and icnt1(1) = '1' and next_icnt1(1) = '0' else
-                  to_unsigned(1, 2)  when (icnt1(0) = '1' and next_icnt1(0) = '0') or (icnt1(1) = '1' and next_icnt1(1) = '0') else
-                  to_unsigned(0, 2);
-
-    increment2 <= to_unsigned(2, 2)  when icnt2(0) = '1' and next_icnt2(0) = '0' and icnt2(1) = '1' and next_icnt2(1) = '0' else
-                  to_unsigned(1, 2)  when (icnt2(0) = '1' and next_icnt2(0) = '0') or (icnt2(1) = '1' and next_icnt2(1) = '0') else
-                  to_unsigned(0, 2);
 
 
-    n_executed_inst1 <= executed_inst1 + increment1 when enable = '1' else
-                        (others => '0');
 
-    n_executed_inst2 <= executed_inst2 + increment2 when enable = '1' else
-                        (others => '0');
+    n_executed_inst1 <= executed_inst1 + 2 when (icnt1(0) and icnt1(1) and enable) = '1' else 
+                        executed_inst1 + 1 when ((icnt1(0) or icnt1(1)) and enable) = '1' else
+                        executed_inst1; --(others => '0');
+
+    n_executed_inst2 <= executed_inst2 + 2 when (icnt2(0) and icnt2(1) and enable) = '1' else 
+                        executed_inst2 + 1 when ((icnt2(0) or icnt2(1)) and enable) = '1' else
+                        executed_inst2; --(others => '0');
+
 
 
     -- It compares the instructions and if the difference is bigger than 'instructions_difference' then
@@ -160,7 +150,7 @@ begin
     f_start_stall <= start_stall and (not start_stall_reg);                 -- When any core is stalled this signal is '1' for one cycle
 
     
-    process(core1_ahead_core2, stall_state, instructions_difference, enable)
+    process(core1_ahead_core2, stall_state, instructions_difference, enable, max_slack, min_slack)
     begin
         next_stall_state <= stall_state;
         stall1 <= '0';
@@ -198,11 +188,14 @@ begin
 
 
     -- pass back the value of the internal registers
-    process(regs_in, counter_times_stalled, cycles_stalled)
+    process(regs_in, counter_times_stalled, cycles_stalled, total_cycles, executed_inst1, executed_inst2)
     begin
         regs_out    <= regs_in;
-        regs_out(1) <= std_logic_vector(counter_times_stalled);
-        regs_out(2) <= std_logic_vector(cycles_stalled);
+        regs_out(1) <= std_logic_vector(total_cycles);
+        regs_out(2) <= std_logic_vector(executed_inst1(31 downto 0));  -- TODO: maybe use several registers if values are too large
+        regs_out(3) <= std_logic_vector(executed_inst2(31 downto 0));
+        regs_out(4) <= std_logic_vector(counter_times_stalled);
+        regs_out(5) <= std_logic_vector(cycles_stalled);
     end process;
 
 end;

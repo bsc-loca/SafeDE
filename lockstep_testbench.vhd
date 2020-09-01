@@ -76,20 +76,28 @@ begin
     --end process fifo;
     
     fifo : process (clk) is 
-        variable false_icnt : std_logic_vector(1 downto 0) := (others => '0');
-        variable delay    : unsigned(3 downto 0) := "0000";
+        variable false_icnt : std_logic_vector(1 downto 0) := "01";
+        variable delay    : unsigned(5 downto 0) := (others => '0');
     begin
         if (rising_edge(clk)) then
             delay := delay + speed;
             if stall2_i = '0' then
                 if delay = 0 or (delay = 1 and speed = 2) then
-                    false_icnt := not(false_icnt) ;
+                    false_icnt := not false_icnt ;
                 end if;
                 icnt2_int  <= false_icnt;
+            else
+                icnt2_int <= "00";
             end if;
         end if;
     end process fifo;
-    icnt2_o <= icnt2_int;
+    process
+    begin
+        wait on icnt2_int;
+        icnt2_o <= icnt2_int;
+        wait for 10 ns;
+        icnt2_o <= "00";
+    end process;
 
 
 
@@ -97,7 +105,7 @@ begin
     begin
         if random_number > 253 then
             if speed = 1 then
-                speed <= to_unsigned(4, 3);
+                speed <= to_unsigned(2, 3);
             else
                 speed <= to_unsigned(1, 3);
             end if;
