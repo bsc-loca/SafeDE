@@ -97,12 +97,22 @@ begin
         if (apbi_psel and apbi_pwrite) = '1' and unsigned(slave_index) = 0 then
             v(to_integer(unsigned(slave_index))) := apbi_pwdata;
         end if;
-        -- system reset
+
+        -- update registers
         if rst = '0' then
-            v := (others => (others => '0'));
+        -- if systems reset set all registers to 0
+            rin <= (others => (others => '0'));
+        elsif v(0)(31) = '1' then
+        -- if rst bit is set, data from slack handler and reset bit are set to 0
+            rin <= (others => (others => '0'));
+            rin(0) <= v(0);
+            rin(0)(31) <= '0';
+        else
+            -- change registers with data from slack handler
+            rin <= regs_slack;
+            -- configuration register shouldn't be changed by the slack handler
+            rin(0) <= v(0);
         end if;
-        rin <= regs_slack;
-        rin(0) <= v(0);
         apbo_prdata <= readdata; -- drive apb read bus
     end process;
     
