@@ -47,7 +47,7 @@ package lockstep_pkg is
         generic (
             min_slack_init   : integer := 100;    -- Minimum difference of instrucctions between both cores
             max_slack_init   : integer := 500;    -- Maximum difference of instrucctions between both cores
-            REGISTERS_NUMBER : integer := 3       -- Number of registers
+            REGISTERS_NUMBER : integer := 6       -- Number of registers
         );
         port (
             clk            : in  std_logic;    

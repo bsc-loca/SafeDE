@@ -13,7 +13,7 @@ entity apb_lockstep is
         max_slack_init  : integer := 500;  -- When one core is 'max_instructions_differece" instrucctions ahead of the other, it is stalled
         -- config
         activate_slack      : integer := 1;          -- It activates the module that controls the max and min instruction that one core is ahead of the other
-        activate_comparator : integer := 1           -- It activates the module that compares results between both cores
+        activate_comparator : integer := 0           -- It activates the module that compares results between both cores
     );
     port (
         rst            : in  std_ulogic;
@@ -80,6 +80,10 @@ begin
             );
     end generate COMP;
 
+    --Here the registers take their new values. It can be:
+    -- 1.- A change in the configuration register
+    -- 2.- Reset if the 31th bit of the configuration register is set to 1
+    -- 3.- Just update the counters from the slack handler
     comb : process(rst, r, apbi_psel, apbi_paddr, apbi_penable, apbi_pwrite, apbi_pwdata, regs_slack)
         variable readdata : std_logic_vector(31 downto 0);
         variable v        : registers_vector(REGISTERS_NUMBER-1 downto 0);
