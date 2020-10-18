@@ -32,85 +32,59 @@ end;
 
 architecture rtl of lockstep_testbench is
 
-    signal random_number :unsigned(7 downto 0);
+    signal random_number, random_number2 : unsigned(7 downto 0);
 
-    signal speed : unsigned(2 downto 0) := to_unsigned(4, 3);   -- It makes the false core go slower "1" or faster "2" than the real core
-    signal icnt2_int: std_logic_vector(1 downto 0);
+    signal icnt2: std_logic_vector(1 downto 0);
 
-    -- constant fifo_length : integer := 500;
-    -- signal false_pc2 : std_logic_vector(63 downto 0);
-    -- type pc_vector is array (integer range <>) of std_logic_vector(63 downto 0);
-
-    -- signal stall2_from_test : std_logic;
+    signal counter, counter_limit : unsigned(2 downto 0) := "000";
+    
+    constant BURDEN : integer := 0;
 
 begin
   
-  -- It copies the same PC as the core in a fifo
-
-  --  pc2_o <= pc1_i when comparator_enabled = '1' else 
-  --           false_pc2;
-    --stall1_o <= '0';
-    --stall2_from_test <= '0';
-    --fifo : process (clk) is 
-    --    variable pc_fifo : pc_vector(0 to fifo_length);
-    --    variable fifo_write_pointer : integer := 0;
-    --    variable fifo_read_pointer  : integer := 0;
-    --begin
-    --    if (rising_edge(clk)) then
-    --        pc_fifo(fifo_write_pointer) := pc1_i;
-    --        if fifo_write_pointer < fifo_length -1 then
-    --            fifo_write_pointer := fifo_write_pointer + 1;
-    --        else
-    --            fifo_write_pointer := 0;
-    --        end if;
-
-    --        if stall2_i = '0' and stall2_from_test = '0'  then
-    --            pc2_o  <= pc_fifo(fifo_read_pointer);
-    --            if fifo_read_pointer < fifo_length-1 then
-    --                fifo_read_pointer := fifo_read_pointer + 1;
-    --            else
-    --                fifo_read_pointer := 0;
-    --            end if;
-    --        end if;
-    --    end if;
-    --end process fifo;
     
-    fifo : process (clk) is 
-        variable false_icnt : std_logic_vector(1 downto 0) := "01";
-        variable delay    : unsigned(5 downto 0) := (others => '0');
+    process (clk) is
+        variable next_instruction : std_logic := '0';
     begin
         if (rising_edge(clk)) then
-            delay := delay + speed;
-            if stall2_i = '0' then
-                if delay = 0 or (delay = 1 and speed = 2) then
-                    false_icnt := not false_icnt ;
-                end if;
-                icnt2_int  <= false_icnt;
+            if counter = counter_limit + BURDEN then
+                next_instruction := '1';
+                counter <= (others => '0');
             else
-                icnt2_int <= "00";
+                counter <= counter + 1;
+            end if;
+
+            if stall2_i = '0' and next_instruction = '1' then
+                next_instruction := '0';
+                if random_number2 < 60 then
+                    icnt2 <= "11";
+                else
+                    icnt2 <= "10";
+                end if;
+            else
+                icnt2 <= "00";
             end if;
         end if;
-    end process fifo;
-    process
-    begin
-        wait on icnt2_int;
-        icnt2_o <= icnt2_int;
-        wait for 10 ns;
-        icnt2_o <= "00";
     end process;
 
-
+    icnt2_o <= icnt2;
 
     speed_select : process
     begin
-        if random_number > 253 then
-            if speed = 1 then
-                speed <= to_unsigned(2, 3);
-            else
-                speed <= to_unsigned(1, 3);
-            end if;
+        if random_number <= 25 then
+            counter_limit <= to_unsigned(0, 3);
+        elsif random_number > 25 and random_number <= 70 then
+            counter_limit <= to_unsigned(1, 3);
+        elsif random_number > 70 and random_number <= 130 then
+            counter_limit <= to_unsigned(2, 3);
+        elsif random_number < (260 - 70)  and random_number > 130 then
+            counter_limit <= to_unsigned(3, 3);
+        elsif random_number < (260 - 25)  and random_number >= (260 - 70) then
+            counter_limit <= to_unsigned(4, 3);
+        elsif random_number >= (260 - 25) then
+            counter_limit <= to_unsigned(5, 3);
         end if;
-        wait on icnt2_int;
+        wait on icnt2;
     end process speed_select;
    
    -- assert (abs(to_integer(unsigned(pc1)) - to_integer(unsigned(pc2))) < (max_slack+3)*8) report "difference is bigger than max_slack "& integer'image(abs(to_integer(unsigned(pc1)) - to_integer(unsigned(pc2)))) severity failure;
@@ -126,8 +100,20 @@ begin
     begin
         uniform(seed1, seed2, x); 
         y := integer(floor(x * 260.0));
-
         random_number <= to_unsigned(y, 8);
+        wait for 10 ns;
+    end process;
+
+    process is
+        -- variable seed1, seed2 : positive;
+        variable seed1 : positive := 4;
+        variable seed2 : positive := 48;
+        variable x : real;
+        variable y : integer;
+    begin
+        uniform(seed1, seed2, x); 
+        y := integer(floor(x * 260.0));
+        random_number2 <= to_unsigned(y, 8);
         wait for 10 ns;
     end process;
 

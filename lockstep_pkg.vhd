@@ -56,8 +56,8 @@ package lockstep_pkg is
             icnt2          : in  std_logic_vector(1 downto 0);    -- Instruction counter from the second core
             regs_in        : in  registers_vector(REGISTERS_NUMBER-1 downto 0); -- Registers of the module (in)
             regs_out       : out registers_vector(REGISTERS_NUMBER-1 downto 0); -- Registers of the module (out) 
-            stall1         : out std_logic;                       -- Signal to stall the first core
-            stall2         : out std_logic                        -- Signal to stall the second core
+            stall1_o       : out std_logic;                       -- Signal to stall the first core
+            stall2_o       : out std_logic                        -- Signal to stall the second core
         );
     end component slack_handler;
 

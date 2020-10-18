@@ -40,7 +40,7 @@ end;
 
 architecture rtl of apb_lockstep is
 
-    constant REGISTERS_NUMBER : integer := 6; -- minimum 2
+    constant REGISTERS_NUMBER : integer := 10; -- minimum 2
     constant SLV_INDEX_CEIL : integer := integer(ceil(log2(real(REGISTERS_NUMBER))));
 
     signal r, rin, regs_slack : registers_vector(REGISTERS_NUMBER-1 downto 0) ;
@@ -59,8 +59,8 @@ begin
             rstn     => rst, 
             icnt1    => icnt1,
             icnt2    => icnt2,
-            stall1   => stall1, 
-            stall2   => stall2,
+            stall1_o => stall1, 
+            stall2_o => stall2,
             regs_in  => r,
             regs_out => regs_slack
             );
