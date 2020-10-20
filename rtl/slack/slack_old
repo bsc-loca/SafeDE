@@ -1,6 +1,6 @@
 -- -----------------------------------------------
 -- Project Name   : De-RISC
--- File           : slack_handler.vhd
+-- File           : comparator.vhd
 -- Organization   : Barcelona Supercomputing Center
 -- Author(s)      : Francisco Bas
 -- Email(s)       : francisco.basjalon@bsc.es
@@ -23,8 +23,8 @@ use bsc.lockstep_pkg.all;
 entity slack_handler is
   generic(
     min_slack_init   : integer := 100;  -- 
-    max_slack_init   : integer := 500;  -- When one core is 'max_instruction_differece" instrucctions ahead of the other, it is stalled.
-    REGISTERS_NUMBER : integer := 10    -- Number of registers
+    max_slack_init   : integer := 500;  -- When one core is 'max_instructions_differece" instrucctions ahead of the other, it is stalled.
+    REGISTERS_NUMBER : integer := 6     -- Number of registers
     );  
   port(
     clk            : in  std_logic;                      
@@ -33,80 +33,75 @@ entity slack_handler is
     icnt2          : in  std_logic_vector(1 downto 0);    -- Instruction counter from the second core
     regs_in        : in  registers_vector(REGISTERS_NUMBER-1 downto 0); -- Registers of the module (in)
     regs_out       : out registers_vector(REGISTERS_NUMBER-1 downto 0); -- Registers of the module (out) 
-    stall1_o       : out std_logic;                       -- Signal to stall the first core
-    stall2_o       : out std_logic                        -- Signal to stall the second core
+    stall1         : out std_logic;                       -- Signal to stall the first core
+    stall2         : out std_logic                        -- Signal to stall the second core
     );  
 end;
 
 architecture rtl of slack_handler is
     -- Signal to count the cycles lockstep has been active
-    signal n_total_cycles, total_cycles: unsigned(31 downto 0);
+    signal total_cycles: unsigned(31 downto 0);
 
-    -- Signals to calculate the number of executed instructions/2 (each PC is two instruction)
-    signal executed_inst1, n_executed_inst1 : unsigned(31 downto 0);
-    signal executed_inst2, n_executed_inst2 : unsigned(31 downto 0);
+    -- Signals to calculate the number of executed instructions/2 (each PC is two instructions)
+    signal executed_inst1, n_executed_inst1 : unsigned(128 downto 0);
+    signal executed_inst2, n_executed_inst2 : unsigned(128 downto 0);
     signal increment1, increment2           : unsigned (1 downto 0);
 
     -- Signals to compare executed instructions of both cores
     signal   core1_ahead_core2             : std_logic;
-    signal   instruction_difference       : unsigned(14 downto 0);   -- It should be intruction_difference_length-1 but this value can be bigger than the limit
+    signal   instructions_difference       : unsigned(14 downto 0);   -- It should be intruction_difference_length-1 but this value can be bigger than the limit
 
 
     -- Signals to implement the FSM to stall a core
     type state_type is (stalled1, stalled2, not_stalled);          -- Define the states 
     signal next_stall_state, stall_state : state_type;
 
-    -- Signals to count the number of times that each core is stalled
-    signal start_stall1, start_stall2, start_stall_reg1, start_stall_reg2, f_start_stall1, f_start_stall2 : std_logic;
-    signal n_times_stalled_core1, n_times_stalled_core2, times_stalled_core1, times_stalled_core2 : unsigned(31 downto 0);
+    -- Signals to count the number of times that one core is stalled
+    signal start_stall, start_stall_reg, f_start_stall : std_logic;
+    signal counter_times_stalled : unsigned(31 downto 0);
 
     -- Signals to count the number of cycles that one core has been stalled
-    signal n_cycles_stalled_core1, n_cycles_stalled_core2, cycles_stalled_core1, cycles_stalled_core2 : unsigned(31 downto 0); 
+    signal cycles_stalled : unsigned(31 downto 0); 
+
+    -- Enable signal
+    signal enable : std_logic;
 
     -- Max and min slack
     signal max_slack : unsigned(14 downto 0);
     signal min_slack : unsigned(14 downto 0);
 
-    -- Enable
-    signal enable : std_logic;
-
-    -- Signals to stall each of the cores
-    signal stall1, stall2 : std_logic;
-
-    -- Sum of instruction differece each cycle
-    signal accumulated_inst_diff, n_accumulated_inst_diff : unsigned(31 downto 0);
-
-    -- max instruction different along the execution
-    signal max_inst_diff, n_max_inst_diff : unsigned(31 downto 0);
-    constant fill_zeros : unsigned(16 downto 0) := to_unsigned(0, 17);
-    
-
 begin 
-    -- Everything here is combinaional logic except for the FSM. registers are defined in the previous level apb_lockstep
 
     -- Enable module and min and max slack
-    enable <= regs_in(0)(0);
+    enable <= regs_in(0)(0); 
     max_slack <= unsigned(regs_in(0)(30 downto 16)) when unsigned(regs_in(0)(30 downto 16)) /= 0 else
                  to_unsigned(max_slack_init, 15);
     min_slack <= unsigned(regs_in(0)(15 downto  1)) when unsigned(regs_in(0)(15 downto  1)) /= 0 else
                  to_unsigned(min_slack_init, 15);
 
-    -- pass forward the value of the registers
-    process(regs_in)
+    -- It calculates the number of executed instructions for both cores using the insturction counter
+    -- It also calculates the cycles since lockstep has been enable
+    -- intruction counter icnt has a bit per lane (both bits)
+    process(clk)
     begin
-          total_cycles          <= unsigned(regs_in(1)); 
-          executed_inst1        <= unsigned(regs_in(2));
-          executed_inst2        <= unsigned(regs_in(3));
-          times_stalled_core1   <= unsigned(regs_in(4));
-          times_stalled_core2   <= unsigned(regs_in(5));
-          cycles_stalled_core1  <= unsigned(regs_in(6));
-          cycles_stalled_core2  <= unsigned(regs_in(7));
-          max_inst_diff         <= unsigned(regs_in(8));
-          accumulated_inst_diff <= unsigned(regs_in(9));
+        if rising_edge(clk) then
+            if rstn = '0' then
+	        executed_inst1 <= (others => '0');
+	        executed_inst2 <= (others => '0');
+                total_cycles   <= (others => '0');
+       	    else
+                executed_inst1 <= n_executed_inst1;
+                executed_inst2 <= n_executed_inst2;
+                if enable = '1' then
+                    total_cycles   <= total_cycles + 1;
+                end if;
+            end if;
+        end if;   
     end process;
 
-    -- It calculates the number of executed instructions for both cores using the insturction counter
-    -- intruction counter icnt has a bit per lane (both bits)
+
+
+
     n_executed_inst1 <= executed_inst1 + 2 when (icnt1(0) and icnt1(1) and enable) = '1' else 
                         executed_inst1 + 1 when ((icnt1(0) or icnt1(1)) and enable) = '1' else
                         executed_inst1; --(others => '0');
@@ -116,39 +111,16 @@ begin
                         executed_inst2; --(others => '0');
 
 
-    -- Counts how many times a core has been stalled
-    n_times_stalled_core1 <= times_stalled_core1 + 1 when (f_start_stall1 = '1') else
-                             times_stalled_core1;                          
-    n_times_stalled_core2 <= times_stalled_core2 + 1 when (f_start_stall2 = '1') else
-                             times_stalled_core2;                          
 
-    -- Counts the total of cycles that core1 and core2 have been stalled
-    n_cycles_stalled_core1 <= cycles_stalled_core1 + 1 when stall1 = '1' else
-                              cycles_stalled_core1;           
-    n_cycles_stalled_core2 <= cycles_stalled_core2 + 1 when stall2 = '1' else
-                              cycles_stalled_core2;           
+    -- It compares the instructions and if the difference is bigger than 'instructions_difference' then
+    -- the core with more instructions is stalled
 
-    -- It calculates the cycles since lockstep has been enable
-    n_total_cycles   <= total_cycles + 1 when enable = '1' else
-                        total_cycles;
+    core1_ahead_core2 <= '1' when executed_inst1 >= executed_inst2 else
+                          '0';
 
-    -- It calculates the maximum difference of instructions along the execution
-    n_max_inst_diff <= (fill_zeros & instruction_difference) when (max_inst_diff(14 downto 0) < instruction_difference) and enable = '1' else
-                       max_inst_diff;
+    instructions_difference <= executed_inst1(14 downto 0) - executed_inst2(14 downto 0) when core1_ahead_core2 = '1' else
+                               executed_inst2(14 downto 0) - executed_inst1(14 downto 0); 
 
-    -- It calculates total difference of instructions along the program
-    n_accumulated_inst_diff <= accumulated_inst_diff + instruction_difference when enable = '1' else
-                               accumulated_inst_diff; 
-
-
-
-    -- If it is 1 means that core1 is ahead of core 2 and viceversa
-    core1_ahead_core2 <= '1' when n_executed_inst1 >= n_executed_inst2 else
-                         '0';
-
-    -- The instruction different is calculated 
-    instruction_difference <= n_executed_inst1(14 downto 0) - n_executed_inst2(14 downto 0) when core1_ahead_core2 = '1' else
-                              n_executed_inst2(14 downto 0) - n_executed_inst1(14 downto 0); 
 
 
     -- finite state machine to stall the core in the lead during 'stalled_cycles' cycles
@@ -156,28 +128,29 @@ begin
     begin
         if rising_edge(clk) then
             if rstn = '0' then
-                stall_state      <= not_stalled;        
-                start_stall_reg1 <= '0';                     
-                start_stall_reg2 <= '0';                     
+                stall_state    <= not_stalled;        
+                cycles_stalled <= (others => '0');          
+                start_stall_reg <= '0';                     
+                counter_times_stalled <= (others => '0'); 
        	    else
-                stall_state  <= next_stall_state;                             -- FMS state
-                start_stall_reg1 <= start_stall1;                             -- Used to detect the flank 
-                start_stall_reg2 <= start_stall2;                             -- Used to detect the flank 
+                stall_state  <= next_stall_state;                           -- FMS state
+                start_stall_reg <= start_stall;                             -- Used to detect the flank 
+                if stall_state /= not_stalled then
+                    cycles_stalled <= cycles_stalled + 1;                   -- Counts the total of cycles that core1 and core2 have been stalled
+                end if;
+                if f_start_stall = '1' then
+                    counter_times_stalled <= counter_times_stalled + 1;     -- Counts how many times a core has been stalled
+                end if;
             end if;
         end if;   
     end process;
 
-    -- Flanks detectors to detect when each core is stalled
-    start_stall1   <= '1' when stall_state = stalled1 else
-                      '0';
-    f_start_stall1 <= start_stall1 and (not start_stall_reg1);                 -- When core1 is stalled this signal is '1' for one cycle
+    start_stall <= '1' when stall_state /= not_stalled else
+                   '0';
+    f_start_stall <= start_stall and (not start_stall_reg);                 -- When any core is stalled this signal is '1' for one cycle
 
-    start_stall2   <= '1' when stall_state = stalled2 else
-                      '0';
-    f_start_stall2 <= start_stall2 and (not start_stall_reg2);                 -- When core2 is stalled this signal is '1' for one cycle
     
-    
-    process(core1_ahead_core2, stall_state, instruction_difference, enable, max_slack, min_slack)
+    process(core1_ahead_core2, stall_state, instructions_difference, enable, max_slack, min_slack)
     begin
         next_stall_state <= stall_state;
         stall1 <= '0';
@@ -185,66 +158,44 @@ begin
         case stall_state is
             when not_stalled =>
                 if enable = '1' then
-                    if instruction_difference > max_slack then
+                    if instructions_difference >= max_slack then
                         if core1_ahead_core2 = '1' then
                             next_stall_state <= stalled1;
-                            stall1 <= '1';
                         else
                             next_stall_state <= stalled2;
-                            stall2 <= '1';
                         end if;
                     end if;
-                    if instruction_difference < min_slack then
+                    if instructions_difference <= min_slack then
                         if core1_ahead_core2 = '1' then
                             next_stall_state <= stalled2;
-                            stall2 <= '1';
                         else
                             next_stall_state <= stalled1;
-                            stall1 <= '1';
                         end if;
                     end if;
                 end if;
             when stalled1  =>
                 stall1 <= '1';
-                if ((instruction_difference < min_slack and core1_ahead_core2 = '1') or (instruction_difference > max_slack and core1_ahead_core2 = '0')) and enable = '1'  then
-                    next_stall_state <= stalled2;
-                    stall1 <= '0';
-                    stall2 <= '1';
-                elsif (instruction_difference <= max_slack and core1_ahead_core2 = '1') or (instruction_difference >= min_slack and core1_ahead_core2 = '0') or enable = '0'  then
+                if (instructions_difference < max_slack and instructions_difference > min_slack) or enable = '0'  then
                     next_stall_state <= not_stalled;
-                    stall1 <= '0';
                 end if;
             when stalled2  =>
                 stall2 <= '1';
-                if ((instruction_difference < min_slack and core1_ahead_core2 = '0') or (instruction_difference > max_slack and core1_ahead_core2 = '1')) and enable = '1' then
-                    next_stall_state <= stalled1;
-                    stall1 <= '1';
-                    stall2 <= '0';
-                elsif (instruction_difference <= max_slack and core1_ahead_core2 = '0') or (instruction_difference >= min_slack and core1_ahead_core2 = '1') or enable = '0'  then
+                if (instructions_difference < max_slack and instructions_difference > min_slack) or enable = '0'  then
                     next_stall_state <= not_stalled;
-                    stall2 <= '0';
                 end if;
         end case;
     end process;
 
-    -- assign stalls to its outputs
-    stall1_o <= stall1;
-    stall2_o <= stall2;
-
 
     -- pass back the value of the internal registers
-    process(regs_in, n_times_stalled_core1, n_times_stalled_core2, n_cycles_stalled_core1, n_cycles_stalled_core2, n_total_cycles, n_executed_inst1, n_executed_inst2, n_max_inst_diff, n_accumulated_inst_diff)
+    process(regs_in, counter_times_stalled, cycles_stalled, total_cycles, executed_inst1, executed_inst2)
     begin
         regs_out    <= regs_in;
-        regs_out(1) <= std_logic_vector(n_total_cycles);
-        regs_out(2) <= std_logic_vector(n_executed_inst1(31 downto 0));  -- TODO: maybe use several registers if values are too large
-        regs_out(3) <= std_logic_vector(n_executed_inst2(31 downto 0));
-        regs_out(4) <= std_logic_vector(n_times_stalled_core1);
-        regs_out(5) <= std_logic_vector(n_times_stalled_core2);
-        regs_out(6) <= std_logic_vector(n_cycles_stalled_core1);
-        regs_out(7) <= std_logic_vector(n_cycles_stalled_core2);
-        regs_out(8) <= std_logic_vector(n_max_inst_diff);
-        regs_out(9) <= std_logic_vector(n_accumulated_inst_diff);
+        regs_out(1) <= std_logic_vector(total_cycles);
+        regs_out(2) <= std_logic_vector(executed_inst1(31 downto 0));  -- TODO: maybe use several registers if values are too large
+        regs_out(3) <= std_logic_vector(executed_inst2(31 downto 0));
+        regs_out(4) <= std_logic_vector(counter_times_stalled);
+        regs_out(5) <= std_logic_vector(cycles_stalled);
     end process;
 
 end;
@@ -280,7 +231,7 @@ end;
 --end;
 --
 --architecture rtl of comparator is
---    -- Signals to calculate the number of executed instruction/2 (each PC is two instruction)
+--    -- Signals to calculate the number of executed instructions/2 (each PC is two instructions)
 --    signal executed_inst1 : unsigned(128 downto 0);
 --    signal executed_inst2 : unsigned(128 downto 0);
 --    signal next_pc1       : std_logic_vector(63 downto 0);
@@ -312,7 +263,7 @@ end;
 --   signal enable_comparation : std_logic;
 --begin 
 --
---    -- Calculate the number o executed instruction/2 for both cores
+--    -- Calculate the number o executed instructions/2 for both cores
 --    process(clk)
 --    begin
 --        if rising_edge(clk) then

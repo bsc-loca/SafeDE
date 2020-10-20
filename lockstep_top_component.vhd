@@ -23,20 +23,20 @@ package lockstep_top_component is
         );
         port (
             -- apb signals
-            rst           : in  std_ulogic;
-            clk           : in  std_ulogic;
-            apbi          : in  apb_slv_in_type;
-            apbo          : out apb_slv_out_type;
+            rst      : in  std_ulogic;
+            clk      : in  std_ulogic;
+            apbi_i   : in  apb_slv_in_type;
+            apbo_o   : out apb_slv_out_type;
             -- comparator signals
-            icnt1         : in  std_logic_vector(1 downto 0);    -- Instruction counter from the first core
-            icnt2         : in  std_logic_vector(1 downto 0);    -- Instruction counter from the second core
-            alu1          : in  std_logic_vector(63 downto 0);   -- Result form the first core ALU
-            alu2          : in  std_logic_vector(63 downto 0);   -- Result form the second core ALU
-            pc1           : in  std_logic_vector(63 downto 0);   -- Current PC of the first core
-            pc2           : in  std_logic_vector(63 downto 0);   -- Current PC of the second core
-            stall1        : out std_logic;                       -- Signal to stall the first core
-            stall2        : out std_logic;                       -- Signal to stall the second core
-            reset_program : out std_logic                        -- Reset the program if the result of both ALUs does not match
+            icnt1_i  : in  std_logic_vector(1 downto 0);    -- Instruction counter from the first core
+            icnt2_i  : in  std_logic_vector(1 downto 0);    -- Instruction counter from the second core
+            --alu1   : in  std_logic_vector(63 downto 0);   -- Result form the first core ALU
+            --alu2   : in  std_logic_vector(63 downto 0);   -- Result form the second core ALU
+            --pc1    : in  std_logic_vector(63 downto 0);   -- Current PC of the first core
+            --pc2    : in  std_logic_vector(63 downto 0);   -- Current PC of the second core
+            stall1_o : out std_logic;                       -- Signal to stall the first core
+            stall2_o : out std_logic;                       -- Signal to stall the second core
+            error_o  : out std_logic                        -- Reset the program if the result of both ALUs does not match
         );
     end component apb_wrapper_lockstep; 
 

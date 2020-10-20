@@ -26,18 +26,18 @@ entity apb_wrapper_lockstep is
         -- apb signals
         rst            : in  std_ulogic;
         clk            : in  std_ulogic;
-        apbi           : in  apb_slv_in_type;
-        apbo           : out apb_slv_out_type;
+        apbi_i           : in  apb_slv_in_type;
+        apbo_o           : out apb_slv_out_type;
         -- lockstep signals 
-        icnt1          : in  std_logic_vector(1 downto 0);    -- Instruction counter from the first core
-        icnt2          : in  std_logic_vector(1 downto 0);    -- Instruction counter from the second core
-        alu1           : in  std_logic_vector(63 downto 0);   -- Result from the first core ALU 
-        alu2           : in  std_logic_vector(63 downto 0);   -- Result from the second core ALU 
-        pc1            : in  std_logic_vector(63 downto 0);   -- Current PC of the first core
-        pc2            : in  std_logic_vector(63 downto 0);   -- Current PC of the second core
-        stall1         : out std_logic;                       -- Signal to stall the first core
-        stall2         : out std_logic;                       -- Signal to stall the second core
-        reset_program  : out std_logic                        -- Reset the program if the result of both ALUs does not match
+        icnt1_i          : in  std_logic_vector(1 downto 0);    -- Instruction counter from the first core
+        icnt2_i          : in  std_logic_vector(1 downto 0);    -- Instruction counter from the second core
+        --alu1           : in  std_logic_vector(63 downto 0);   -- Result from the first core ALU 
+        --alu2           : in  std_logic_vector(63 downto 0);   -- Result from the second core ALU 
+        --pc1            : in  std_logic_vector(63 downto 0);   -- Current PC of the first core
+        --pc2            : in  std_logic_vector(63 downto 0);   -- Current PC of the second core
+        stall1_o         : out std_logic;                       -- Signal to stall the first core
+        stall2_o         : out std_logic;                       -- Signal to stall the second core
+        error_o  : out std_logic                        -- Reset the program if the result of both ALUs does not match
     );
     end;
 
@@ -67,28 +67,28 @@ begin
         rst           => rst, 
         clk           => clk, 
         -- apb signals
-        apbi_psel     => apbi.psel(pindex),     
-        apbi_paddr    => apbi.paddr,    
-        apbi_penable  => apbi.penable,  
-        apbi_pwrite   => apbi.pwrite,   
-        apbi_pwdata   => apbi.pwdata,   
-        apbo_prdata   => apbo.prdata,   
+        apbi_psel_i     => apbi_i.psel(pindex),     
+        apbi_paddr_i    => apbi_i.paddr,    
+        apbi_penable_i  => apbi_i.penable,  
+        apbi_pwrite_i   => apbi_i.pwrite,   
+        apbi_pwdata_i   => apbi_i.pwdata,   
+        apbo_prdata_o   => apbo_o.prdata,   
         -- lockstep signals
-        icnt1         => icnt1,
-        icnt2         => icnt2,        
-        alu1          => alu1,         
-        alu2          => alu2,         
-        pc1           => pc1,          
-        pc2           => pc2,           
-        stall1        => stall1,       
-        stall2        => stall2,       
-        reset_program => reset_program
+        icnt1_i         => icnt1_i,
+        icnt2_i         => icnt2_i,        
+        --alu1          => alu1,         
+        --alu2          => alu2,         
+        --pc1           => pc1,          
+        --pc2           => pc2,           
+        stall1_o        => stall1_o,       
+        stall2_o        => stall2_o,       
+        error_o         => error_o
     );
 
         
-    apbo.pirq <= (others => '0');
-    apbo.pindex <= pindex;
-    apbo.pconfig <= PCONFIG;
+    apbo_o.pirq <= (others => '0');
+    apbo_o.pindex <= pindex;
+    apbo_o.pconfig <= PCONFIG;
     -- No IRQ
     -- VHDL generic
     -- Config constant
