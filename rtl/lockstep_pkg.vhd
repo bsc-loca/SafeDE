@@ -41,21 +41,25 @@ package lockstep_pkg is
 
     component slack_handler is
         generic (
-            REGISTERS_NUMBER : integer := 6       -- Number of registers
+            en_cycles_limit  : integer := 100;
+            REGISTERS_NUMBER : integer := 10       -- Number of registers
         );
         port (
             clk            : in  std_logic;    
             rstn           : in  std_logic;
-            enable         : in  std_logic;
+            enable_core1_i : in  std_logic;
+            enable_core2_i : in  std_logic;
             icnt1_i        : in  std_logic_vector(1 downto 0);                  -- Instruction counter from the first core
             icnt2_i        : in  std_logic_vector(1 downto 0);                  -- Instruction counter from the second core
-            max_slack_i    : in  std_logic_vector(14 downto 0);
-            min_slack_i    : in  std_logic_vector(14 downto 0);
+            max_slack_i    : in  std_logic_vector(9 downto 0);
+            min_slack_i    : in  std_logic_vector(9 downto 0);
             regs_in        : in  registers_vector(REGISTERS_NUMBER-1 downto 1); -- Registers of the module (in)
             regs_out       : out registers_vector(REGISTERS_NUMBER-1 downto 1); -- Registers of the module (out) 
             c1_ahead_c2_o  : out std_logic;                                     -- It is 1 when core1 is ahead of core2 and the other way round
             stall1_o       : out std_logic;                                     -- Signal to stall the first core
-            stall2_o       : out std_logic                                      -- Signal to stall the second core
+            stall2_o       : out std_logic;                                     -- Signal to stall the second core
+            error_o        : out std_logic;                                     -- Signal to assert an error
+            enable_comp_o  : out std_logic                                      -- Signal to stall comparator
         );
     end component slack_handler;
 

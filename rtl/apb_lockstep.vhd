@@ -8,7 +8,7 @@ use bsc.lockstep_pkg.all;
 
 entity apb_lockstep is
     generic (
-        -- comparator genercis
+        -- genercis
         min_slack_init  : integer := 100;  -- Number of cycles that the core is going to be stalled
         max_slack_init  : integer := 500;  -- When one core is 'max_instructions_differece" instrucctions ahead of the other, it is stalled
         -- config
@@ -44,39 +44,44 @@ architecture rtl of apb_lockstep is
     signal regs_handler_o : registers_vector(REGISTERS_NUMBER-1 downto 1) ;
 
     -- configuration signals
-    signal max_slack : std_logic_vector(14 downto 0);
-    signal min_slack : std_logic_vector(14 downto 0);
-    signal enable : std_logic;
+    signal max_slack : std_logic_vector(9 downto 0);
+    signal min_slack : std_logic_vector(9 downto 0);
+    signal enable_core1, enable_core2 : std_logic;
 
 
 begin
 
     -- Enable module, min and max slack
-    enable <= r(0)(0);
-    max_slack <= r(0)(30 downto 16) when unsigned(r(0)(30 downto 16)) /= 0 else
-                 std_logic_vector(to_unsigned(max_slack_init, 15));
-    min_slack <= r(0)(15 downto  1) when unsigned(r(0)(15 downto  1)) /= 0 else
-                 std_logic_vector(to_unsigned(min_slack_init, 15));
+    enable_core1 <= r(0)(0);
+    enable_core2 <= r(0)(1);
+    max_slack <= r(0)(30 downto 21) when unsigned(r(0)(30 downto 21)) /= 0 else
+                 std_logic_vector(to_unsigned(max_slack_init, 10));
+    min_slack <= r(0)(20 downto 11) when unsigned(r(0)(20 downto 11)) /= 0 else
+                 std_logic_vector(to_unsigned(min_slack_init, 10));
 
 
     SLACK: if activate_slack = 1 generate
         slack_handler_inst : slack_handler 
         generic map(
+            en_cycles_limit  => 100,
             REGISTERS_NUMBER => REGISTERS_NUMBER 
             )
         port map(
-            clk           => clk,
-            rstn          => rst, 
-            enable        => enable,
-            icnt1_i       => icnt1_i,
-            icnt2_i       => icnt2_i,
-            min_slack_i   => min_slack,
-            max_slack_i   => max_slack, 
-            regs_in       => r(REGISTERS_NUMBER-1 downto 1),
-            regs_out      => regs_handler_o,
-            c1_ahead_c2_o => open,
-            stall1_o      => stall1_o, 
-            stall2_o      => stall2_o
+            clk            => clk,
+            rstn           => rst, 
+            enable_core1_i => enable_core1,
+            enable_core2_i => enable_core2,
+            icnt1_i        => icnt1_i,
+            icnt2_i        => icnt2_i,
+            min_slack_i    => min_slack,
+            max_slack_i    => max_slack, 
+            regs_in        => r(REGISTERS_NUMBER-1 downto 1),
+            regs_out       => regs_handler_o,
+            c1_ahead_c2_o  => open,
+            stall1_o       => stall1_o, 
+            stall2_o       => stall2_o,
+            error_o        => open,
+            enable_comp_o  => open
             );
     end generate SLACK;
 
