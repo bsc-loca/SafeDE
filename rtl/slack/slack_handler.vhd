@@ -21,27 +21,26 @@ library bsc;
 use bsc.lockstep_pkg.all;
 
 entity slack_handler is
-  generic(
-    en_cycles_limit  : integer := 100;  -- Max time allow from the activation of one to the activation of the other
-    REGISTERS_NUMBER : integer := 10    -- Number of registers
-    );  
-  port(
-    clk            : in  std_logic;                      
-    rstn           : in  std_logic;
-    enable_core1_i : in  std_logic;
-    enable_core2_i : in  std_logic;
-    icnt1_i        : in  std_logic_vector(1 downto 0);                  -- Instruction counter from the first core
-    icnt2_i        : in  std_logic_vector(1 downto 0);                  -- Instruction counter from the second core
-    max_slack_i    : in  std_logic_vector(9 downto 0);
-    min_slack_i    : in  std_logic_vector(9 downto 0);
-    regs_in        : in  registers_vector(REGISTERS_NUMBER-1 downto 1); -- Registers of the module (in)
-    regs_out       : out registers_vector(REGISTERS_NUMBER-1 downto 1); -- Registers of the module (out) 
-    c1_ahead_c2_o  : out std_logic;                                     -- It is 1 when core1 is ahead of core2 and the other way round
-    stall1_o       : out std_logic;                                     -- Signal to stall the first core
-    stall2_o       : out std_logic;                                     -- Signal to stall the second core
-    error_o        : out std_logic;                                     -- Signal to assert an error
-    enable_comp_o  : out std_logic                                      -- Signal to enable comparator
-    );  
+    generic(
+        en_cycles_limit  : integer := 100;  -- Max time allow from the activation of one to the activation of the other
+        REGISTERS_NUMBER : integer := 10    -- Number of registers
+        );  
+    port(
+        clk            : in  std_logic;                      
+        rstn           : in  std_logic;
+        enable_core1_i : in  std_logic;
+        enable_core2_i : in  std_logic;
+        icnt1_i        : in  std_logic_vector(1 downto 0);                  -- Instruction counter from the first core
+        icnt2_i        : in  std_logic_vector(1 downto 0);                  -- Instruction counter from the second core
+        max_slack_i    : in  std_logic_vector(9 downto 0);
+        min_slack_i    : in  std_logic_vector(9 downto 0);
+        regs_in        : in  registers_vector(REGISTERS_NUMBER-1 downto 3); -- Registers of the module (in)
+        regs_out       : out registers_vector(REGISTERS_NUMBER-1 downto 3); -- Registers of the module (out) 
+        c1_ahead_c2_o  : out std_logic;                                     -- It is 1 when core1 is ahead of core2 and the other way round
+        stall1_o       : out std_logic;                                     -- Signal to stall the first core
+        stall2_o       : out std_logic;                                     -- Signal to stall the second core
+        error_o        : out std_logic                                      -- Signal to assert an error
+        );  
 end;
 
 architecture rtl of slack_handler is
@@ -92,21 +91,22 @@ begin
     -- pass forward the value of the registers
     process(regs_in)
     begin
-          r_total_cycles          <= unsigned(regs_in(1)); 
-          r_executed_inst1        <= unsigned(regs_in(2));
-          r_executed_inst2        <= unsigned(regs_in(3));
-          r_times_stalled_core1   <= unsigned(regs_in(4));
-          r_times_stalled_core2   <= unsigned(regs_in(5));
-          r_cycles_stalled_core1  <= unsigned(regs_in(6));
-          r_cycles_stalled_core2  <= unsigned(regs_in(7));
-          r_max_inst_diff         <= unsigned(regs_in(8));
-          r_accumulated_inst_diff <= unsigned(regs_in(9));
+          r_total_cycles          <= unsigned(regs_in(3)); 
+          r_executed_inst1        <= unsigned(regs_in(4));
+          r_executed_inst2        <= unsigned(regs_in(5));
+          r_times_stalled_core1   <= unsigned(regs_in(6));
+          r_times_stalled_core2   <= unsigned(regs_in(7));
+          r_cycles_stalled_core1  <= unsigned(regs_in(8));
+          r_cycles_stalled_core2  <= unsigned(regs_in(9));
+          r_max_inst_diff         <= unsigned(regs_in(10));
+          r_accumulated_inst_diff <= unsigned(regs_in(11));
     end process;
 
     ----------------------------------------------------------------------- COMBINATIONAL LOGIC --------------------------------------------------------------------------------------------------
 
-    -- If any of the cores is enable is enable, enable is asserted
-    enable <= enable_core1_i and enable_core2_i;
+    -- If the leading core is enable, enable is asserted and stalls can ocurr
+    enable <= '1' when (core1_ahead_core2 and enable_core1_i) = '1' or (not(core1_ahead_core2) and enable_core2_i) = '1' else
+              '0';
 
     -- It calculates the number of executed instructions for both cores using the insturction counter
     -- intruction counter icnt has a bit per lane (both bits)
@@ -140,7 +140,7 @@ begin
                        r_max_inst_diff;
 
     -- It calculates total difference of instructions along the program
-    n_accumulated_inst_diff <= r_accumulated_inst_diff + instruction_difference when enable = '1' else
+    n_accumulated_inst_diff <= r_accumulated_inst_diff + instruction_difference when (enable_core1_i and enable_core2_i) = '1' else
                                r_accumulated_inst_diff; 
 
 
@@ -196,7 +196,7 @@ begin
     f_stall2 <= stall2 and (not r_stall2);                 -- When core2 is stalled this signal is '1' for one cycle
     
     
-    process(core1_ahead_core2, stall_fsm, instruction_difference, enable, max_slack_i, min_slack_i)
+    process(core1_ahead_core2, stall_fsm, instruction_difference, enable, enable_core1_i, enable_core2_i, max_slack_i, min_slack_i)
     begin
         n_stall_fsm <= stall_fsm;
         stall1 <= '0';
@@ -206,20 +206,28 @@ begin
                 if enable = '1' then
                     if instruction_difference > unsigned(max_slack_i) then
                         if core1_ahead_core2 = '1' then
-                            n_stall_fsm <= stalled1;
-                            stall1 <= '1';
+                            if enable_core1_i = '1' then
+                                n_stall_fsm <= stalled1;
+                                stall1 <= '1';
+                            end if;
                         else
-                            n_stall_fsm <= stalled2;
-                            stall2 <= '1';
+                            if enable_core2_i = '1' then
+                                n_stall_fsm <= stalled2;
+                                stall2 <= '1';
+                            end if;
                         end if;
                     end if;
                     if instruction_difference < unsigned(min_slack_i) then
                         if core1_ahead_core2 = '1' then
-                            n_stall_fsm <= stalled2;
-                            stall2 <= '1';
+                            if enable_core2_i = '1' then
+                                n_stall_fsm <= stalled2;
+                                stall2 <= '1';
+                            end if;
                         else
-                            n_stall_fsm <= stalled1;
-                            stall1 <= '1';
+                            if enable_core1_i = '1' then
+                                n_stall_fsm <= stalled1;
+                                stall1 <= '1';
+                            end if;
                         end if;
                     end if;
                 end if;
@@ -254,20 +262,19 @@ begin
     stall2_o <= stall2;
 
     c1_ahead_c2_o <= core1_ahead_core2; 
-    enable_comp_o <= enable;
 
     -- pass back the value of the internal registers
     process(regs_in, n_times_stalled_core1, n_times_stalled_core2, n_cycles_stalled_core1, n_cycles_stalled_core2, n_total_cycles, n_executed_inst1, n_executed_inst2, n_max_inst_diff, n_accumulated_inst_diff)
     begin
-        regs_out(1) <= std_logic_vector(n_total_cycles);
-        regs_out(2) <= std_logic_vector(n_executed_inst1(31 downto 0));  -- TODO: maybe use several registers if values are too large
-        regs_out(3) <= std_logic_vector(n_executed_inst2(31 downto 0));
-        regs_out(4) <= std_logic_vector(n_times_stalled_core1);
-        regs_out(5) <= std_logic_vector(n_times_stalled_core2);
-        regs_out(6) <= std_logic_vector(n_cycles_stalled_core1);
-        regs_out(7) <= std_logic_vector(n_cycles_stalled_core2);
-        regs_out(8) <= std_logic_vector(n_max_inst_diff);
-        regs_out(9) <= std_logic_vector(n_accumulated_inst_diff);
+        regs_out(3) <= std_logic_vector(n_total_cycles);
+        regs_out(4) <= std_logic_vector(n_executed_inst1(31 downto 0));  -- TODO: maybe use several registers if values are too large
+        regs_out(5) <= std_logic_vector(n_executed_inst2(31 downto 0));
+        regs_out(6) <= std_logic_vector(n_times_stalled_core1);
+        regs_out(7) <= std_logic_vector(n_times_stalled_core2);
+        regs_out(8) <= std_logic_vector(n_cycles_stalled_core1);
+        regs_out(9) <= std_logic_vector(n_cycles_stalled_core2);
+        regs_out(10) <= std_logic_vector(n_max_inst_diff);
+        regs_out(11) <= std_logic_vector(n_accumulated_inst_diff);
     end process;
 
 end;
