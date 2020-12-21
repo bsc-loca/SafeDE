@@ -222,6 +222,12 @@ begin
     --    end if;
     --end process;
 
+    -- Verification -----------------
+    process
+    begin
+        wait for 1 ns;
+        assert (error_from_sh = '0') report "Result: error detected by lockstep" severity failure;
+    end process;
     
 
 end;
