@@ -64,9 +64,9 @@ begin
     delayed_core_wdata <= ahbmo1_wdata_i when c1_ahead_c2_i = '0' else
                           ahbmo2_wdata_i;
 
-    access_trans(0) <= ahbmo1_trans_i and ahb_access_i(0);
-    access_trans(1) <= ahbmo2_trans_i and ahb_access_i(1);
-    ff: process(clk)
+    access_trans(0) <= ahbmo1_trans_i and ahb_access_i(0); ----------------------
+    access_trans(1) <= ahbmo2_trans_i and ahb_access_i(1); --TODO:--------------- ahb_access_i not one hot encoding
+    ff: process(clk)                                       ----------------------
     begin
         if rising_edge(clk) then
             if rstn = '0' then

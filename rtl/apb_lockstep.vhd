@@ -49,16 +49,16 @@ end;
 
 architecture rtl of apb_lockstep is
 
-    constant REGISTERS_NUMBER : integer := 14; -- minimum 2
+    constant REGISTERS_NUMBER : integer := 15; -- minimum 2
     constant SLV_INDEX_CEIL : integer := integer(ceil(log2(real(REGISTERS_NUMBER))));
 
     -- registers signals
     signal r, rin     : registers_vector(REGISTERS_NUMBER-1 downto 0) ;
-    signal regs_handler_o : registers_vector(REGISTERS_NUMBER-1 downto 3) ;
+    signal regs_handler_o : registers_vector(REGISTERS_NUMBER-2 downto 3) ;
 
     -- configuration signals
-    signal max_slack : std_logic_vector(9 downto 0);
-    signal min_slack : std_logic_vector(9 downto 0);
+    signal max_slack : std_logic_vector(15 downto 0);
+    signal min_slack : std_logic_vector(14 downto 0);
     signal enable_core1, enable_core2 : std_logic;
 
     -- error signals
@@ -77,10 +77,10 @@ begin
     -- Get enable signals and min and max slack
     enable_core1 <= r(1)(0);
     enable_core2 <= r(2)(0);
-    max_slack <= r(0)(30 downto 21) when unsigned(r(0)(30 downto 21)) /= 0 else
-                 std_logic_vector(to_unsigned(max_slack_init, 10));
-    min_slack <= r(0)(20 downto 11) when unsigned(r(0)(20 downto 11)) /= 0 else
-                 std_logic_vector(to_unsigned(min_slack_init, 10));
+    max_slack <= r(0)(30 downto 15) when unsigned(r(0)(30 downto 15)) /= 0 else
+                 std_logic_vector(to_unsigned(max_slack_init, 16));
+    min_slack <= r(0)(14 downto 0) when unsigned(r(0)(14 downto 0)) /= 0 else
+                 std_logic_vector(to_unsigned(min_slack_init, 15));
 
 
     ------------------------------- MODULES INSTANTIATION -----------------------------
@@ -102,7 +102,7 @@ begin
             icnt2_i        => icnt2_i,
             min_slack_i    => min_slack,
             max_slack_i    => max_slack, 
-            regs_in        => r(REGISTERS_NUMBER-1 downto 3),
+            regs_in        => r(REGISTERS_NUMBER-2 downto 3),
             regs_out       => regs_handler_o,
             c1_ahead_c2_o  => c1_ahead_c2_from_sh,
             stall1_o       => stall1_o, 
@@ -173,28 +173,33 @@ begin
         if rstn = '0' then
         -- if systems reset set all registers to 0
             rin <= (others => (others => '0'));
+            -- Register containing minimum instructions difference should be reset to a high value
+            rin(12) <= (others => '1');
         elsif v(0)(31) = '1' then
         -- if rst bit is set, data from slack handler and reset bit are set to 0
             rin <= (others => (others => '0'));
+            -- Register containing minimum instructions difference should be reset to a high value
+            rin(12) <= (others => '1');
+
             rin(0) <= v(0);
             rin(0)(31) <= '0';
         else
             -- change registers with data from slack handler
-            rin(REGISTERS_NUMBER-1 downto 3)  <= regs_handler_o;
+            rin(REGISTERS_NUMBER-2 downto 3)  <= regs_handler_o;
             -- configuration register shouldn't be changed by the slack handler
             rin(0) <= v(0);
             rin(1) <= v(1);
             rin(2) <= v(2);
-            if v(12) = x"00000000" and error_from_comp = '1' then
-                rin(12) <= v(5); 
-            else
-                rin(12) <= v(12);
-            end if;
-            if error_from_comp = '1' then
-                error_count := unsigned(v(13)) + 1;
-                rin(13) <= std_logic_vector(error_count);
+            if v(13) = x"00000000" and error_from_comp = '1' then
+                rin(13) <= v(5); 
             else
                 rin(13) <= v(13);
+            end if;
+            if error_from_comp = '1' then
+                error_count := unsigned(v(14)) + 1;
+                rin(14) <= std_logic_vector(error_count);
+            else
+                rin(14) <= v(14);
             end if;
         end if;
         apbo_prdata_o <= readdata; -- drive apb read bus
@@ -226,7 +231,7 @@ begin
     process
     begin
         wait for 1 ns;
-        assert (error_from_sh = '0') report "Result: error detected by lockstep" severity failure;
+        assert (error_from_sh = '0') report "Result: error detected by lockstep" severity warning;
     end process;
     
 

@@ -32,10 +32,10 @@ entity slack_handler is
         enable_core2_i : in  std_logic;
         icnt1_i        : in  std_logic_vector(1 downto 0);                  -- Instruction counter from the first core
         icnt2_i        : in  std_logic_vector(1 downto 0);                  -- Instruction counter from the second core
-        max_slack_i    : in  std_logic_vector(9 downto 0);
-        min_slack_i    : in  std_logic_vector(9 downto 0);
-        regs_in        : in  registers_vector(REGISTERS_NUMBER-1 downto 3); -- Registers of the module (in)
-        regs_out       : out registers_vector(REGISTERS_NUMBER-1 downto 3); -- Registers of the module (out) 
+        max_slack_i    : in  std_logic_vector(15 downto 0);
+        min_slack_i    : in  std_logic_vector(14 downto 0);
+        regs_in        : in  registers_vector(REGISTERS_NUMBER-2 downto 3); -- Registers of the module (in)
+        regs_out       : out registers_vector(REGISTERS_NUMBER-2 downto 3); -- Registers of the module (out) 
         c1_ahead_c2_o  : out std_logic;                                     -- It is 1 when core1 is ahead of core2 and the other way round
         stall1_o       : out std_logic;                                     -- Signal to stall the first core
         stall2_o       : out std_logic;                                     -- Signal to stall the second core
@@ -47,7 +47,7 @@ architecture rtl of slack_handler is
 
     -- Signals to compare executed instructions of both cores
     signal core1_ahead_core2      : std_logic;
-    signal instruction_difference : unsigned(9 downto 0);   -- It should be intruction_difference_length-1 but this value can be bigger than the limit
+    signal instruction_difference : unsigned(15 downto 0);   -- It should be intruction_difference_length-1 but this value can be bigger than the limit
 
     -- Signals to stall each of the cores
     signal stall1, stall2 : std_logic;
@@ -76,7 +76,11 @@ architecture rtl of slack_handler is
 
     -- max instruction different along the execution
     signal r_max_inst_diff, n_max_inst_diff : unsigned(31 downto 0);
-    constant fill_zeros : unsigned(21 downto 0) := to_unsigned(0, 22);
+    constant fill_zeros : unsigned(15 downto 0) := to_unsigned(0, 16);
+
+    -- min instruction different along the execution
+    signal r_min_inst_diff, n_min_inst_diff : unsigned(31 downto 0);
+    signal activate_minimum_inst_comp_r     : std_logic;
 
     -- error counter signals
     constant ERROR_COUNT_INDEX : integer := integer(ceil(log2(real(en_cycles_limit))));
@@ -100,6 +104,7 @@ begin
           r_cycles_stalled_core2  <= unsigned(regs_in(9));
           r_max_inst_diff         <= unsigned(regs_in(10));
           r_accumulated_inst_diff <= unsigned(regs_in(11));
+          r_min_inst_diff         <= unsigned(regs_in(12));
     end process;
 
     ----------------------------------------------------------------------- COMBINATIONAL LOGIC --------------------------------------------------------------------------------------------------
@@ -136,7 +141,7 @@ begin
                         r_total_cycles;
 
     -- It calculates the maximum difference of instructions along the execution
-    n_max_inst_diff <= (fill_zeros & instruction_difference) when (r_max_inst_diff(9 downto 0) < instruction_difference) and enable = '1' else
+    n_max_inst_diff <= (fill_zeros & instruction_difference) when (r_max_inst_diff(15 downto 0) < instruction_difference) and enable = '1' else
                        r_max_inst_diff;
 
     -- It calculates total difference of instructions along the program
@@ -150,8 +155,31 @@ begin
                          '0';
 
     -- The instruction different is calculated 
-    instruction_difference <= n_executed_inst1(9 downto 0) - n_executed_inst2(9 downto 0) when core1_ahead_core2 = '1' else
-                              n_executed_inst2(9 downto 0) - n_executed_inst1(9 downto 0); 
+    instruction_difference <= n_executed_inst1(15 downto 0) - n_executed_inst2(15 downto 0) when core1_ahead_core2 = '1' else
+                              n_executed_inst2(15 downto 0) - n_executed_inst1(15 downto 0); 
+
+
+    -- Minimum instruction difference after activation is calculated
+    -- Register indicating that minimum instruction comparison should be performed
+    process(clk)
+    begin
+        if rising_edge(clk) then
+            if rstn = '0' then
+                activate_minimum_inst_comp_r <= '0';
+            else
+                if (activate_minimum_inst_comp_r = '0') then
+                    if (enable_core1_i = '1' and enable_core2_i = '1' and n_stall_fsm = not_stalled) then
+                        activate_minimum_inst_comp_r <= '1';
+                    end if;
+                elsif (enable_core1_i = '0' or enable_core2_i = '0') then
+                    activate_minimum_inst_comp_r <= '0';
+                end if;
+            end if;
+        end if;
+    end process;
+
+    n_min_inst_diff <= (fill_zeros & instruction_difference) when (r_min_inst_diff(15 downto 0) > instruction_difference) and activate_minimum_inst_comp_r = '1' else
+                       r_min_inst_diff;
 
     ------------------------------------------------------ COUNTER TO ASSERT ERROR SIGNAL --------------------------------------------------------------------------------------------- 
     -- Error signal is asserted if one core enables lockstep and the other doesn't enable the lockstep within a ceratain time
@@ -264,7 +292,7 @@ begin
     c1_ahead_c2_o <= core1_ahead_core2; 
 
     -- pass back the value of the internal registers
-    process(regs_in, n_times_stalled_core1, n_times_stalled_core2, n_cycles_stalled_core1, n_cycles_stalled_core2, n_total_cycles, n_executed_inst1, n_executed_inst2, n_max_inst_diff, n_accumulated_inst_diff)
+    process(regs_in, n_times_stalled_core1, n_times_stalled_core2, n_cycles_stalled_core1, n_cycles_stalled_core2, n_total_cycles, n_executed_inst1, n_executed_inst2, n_max_inst_diff, n_accumulated_inst_diff, n_min_inst_diff)
     begin
         regs_out(3) <= std_logic_vector(n_total_cycles);
         regs_out(4) <= std_logic_vector(n_executed_inst1(31 downto 0));  -- TODO: maybe use several registers if values are too large
@@ -275,6 +303,7 @@ begin
         regs_out(9) <= std_logic_vector(n_cycles_stalled_core2);
         regs_out(10) <= std_logic_vector(n_max_inst_diff);
         regs_out(11) <= std_logic_vector(n_accumulated_inst_diff);
+        regs_out(12) <= std_logic_vector(n_min_inst_diff);
     end process;
 
 end;
