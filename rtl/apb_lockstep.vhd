@@ -54,7 +54,7 @@ architecture rtl of apb_lockstep is
 
     -- registers signals
     signal r, rin     : registers_vector(REGISTERS_NUMBER-1 downto 0) ;
-    signal regs_handler_o : registers_vector(REGISTERS_NUMBER-2 downto 3) ;
+    signal regs_handler_o : registers_vector(REGISTERS_NUMBER-3 downto 3) ;
 
     -- configuration signals
     signal max_slack : std_logic_vector(15 downto 0);
@@ -102,7 +102,7 @@ begin
             icnt2_i        => icnt2_i,
             min_slack_i    => min_slack,
             max_slack_i    => max_slack, 
-            regs_in        => r(REGISTERS_NUMBER-2 downto 3),
+            regs_in        => r(REGISTERS_NUMBER-3 downto 3),
             regs_out       => regs_handler_o,
             c1_ahead_c2_o  => c1_ahead_c2_from_sh,
             stall1_o       => stall1_o, 
@@ -110,6 +110,7 @@ begin
             error_o        => error_from_sh
             );
     end generate SLACK;
+
 
     COMP: if activate_comparator = 1 generate
         comparator_inst : comparator
@@ -139,7 +140,10 @@ begin
             );
     end generate COMP;
 
-
+    NO_COMP: if activate_comparator = 0 generate
+        --Tie signal
+        error_from_comp <= '0';
+    end generate NO_COMP;
     -------------------------------------------- APB REGISTERS ----------------------------------------------------
 
     --Here the registers take their new values. It can be:
@@ -185,7 +189,7 @@ begin
             rin(0)(31) <= '0';
         else
             -- change registers with data from slack handler
-            rin(REGISTERS_NUMBER-2 downto 3)  <= regs_handler_o;
+            rin(REGISTERS_NUMBER-3 downto 3)  <= regs_handler_o;
             -- configuration register shouldn't be changed by the slack handler
             rin(0) <= v(0);
             rin(1) <= v(1);
@@ -228,11 +232,13 @@ begin
     --end process;
 
     -- Verification -----------------
+    -- pragma translate_off
     process
     begin
         wait for 1 ns;
         assert (error_from_sh = '0') report "Result: error detected by lockstep" severity warning;
     end process;
+    -- pragma translate_on
     
 
 end;

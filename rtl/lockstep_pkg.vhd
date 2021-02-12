@@ -66,8 +66,8 @@ package lockstep_pkg is
             icnt2_i        : in  std_logic_vector(1 downto 0);                  -- Instruction counter from the second core
             max_slack_i    : in  std_logic_vector(15 downto 0);
             min_slack_i    : in  std_logic_vector(14 downto 0);
-            regs_in        : in  registers_vector(REGISTERS_NUMBER-2 downto 3); -- Registers of the module (in)
-            regs_out       : out registers_vector(REGISTERS_NUMBER-2 downto 3); -- Registers of the module (out) 
+            regs_in        : in  registers_vector(REGISTERS_NUMBER-3 downto 3); -- Registers of the module (in)
+            regs_out       : out registers_vector(REGISTERS_NUMBER-3 downto 3); -- Registers of the module (out) 
             c1_ahead_c2_o  : out std_logic;                                     -- It is 1 when core1 is ahead of core2 and the other way round
             stall1_o       : out std_logic;                                     -- Signal to stall the first core
             stall2_o       : out std_logic;                                     -- Signal to stall the second core
