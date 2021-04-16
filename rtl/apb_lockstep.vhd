@@ -9,11 +9,11 @@ use bsc.lockstep_pkg.all;
 entity apb_lockstep is
     generic (
         -- genercis
-        min_slack_init  : integer := 100;  -- Number of cycles that the core is going to be stalled
-        max_slack_init  : integer := 500;  -- When one core is 'max_instructions_differece" instrucctions ahead of the other, it is stalled
+        min_slack_init  : integer := 20;      -- If no min_slack is configured through the API, this will be take as the default minimum threshold
+        max_slack_init  : integer := 20;      -- If no min_slack is configured through the API, this will be take as the default minimum threshold
         -- config
-        activate_slack      : integer := 1;          -- It activates the module that controls the max and min instruction that one core is ahead of the other
-        activate_comparator : integer := 1;          -- It activates the module that compares results between both cores
+        activate_slack      : integer := 1;   -- It activates the module that controls the max and min instruction that one core is ahead of the other
+        activate_comparator : integer := 1;   -- It activates the module that compares results between both cores
         -- ahb bus
         BUS_LENGTH : integer := 128
     );
@@ -72,21 +72,26 @@ architecture rtl of apb_lockstep is
 
 begin
     
-    ---------------------------------- CONFIG REGISTER --------------------------------
-
-    -- Get enable signals and min and max slack
-    enable_core1 <= r(1)(0);
-    enable_core2 <= r(2)(0);
+    --------------------------------------------------------------------------------------------------------------------------------------------------------
+    -- CONFIGURATION REGISTERS -----------------------------------------------------------------------------------------------------------------------------
+    --------------------------------------------------------------------------------------------------------------------------------------------------------
+    -- The values for the configuration registers are taken from the APB interface
+    enable_core1 <= r(1)(0); -- Set to 1 when the core1 enters in the critical section
+    enable_core2 <= r(2)(0); -- Set to 1 when the core1 enters in the critical section
+    -- If no max_slack is especified through the API, the signal max_slack will get the value 0 
+    -- and there won't be a upper threshold, just a lower one (minimum threshold).
     max_slack <= r(0)(30 downto 15) when unsigned(r(0)(30 downto 15)) /= 0 else
-                 std_logic_vector(to_unsigned(max_slack_init, 16));
+                 std_logic_vector(to_unsigned(0, 16));
+    -- If no min_slack is specified throuhg the API, the signal min_slack will take the value of
+    -- the generic min_slack_init 
     min_slack <= r(0)(14 downto 0) when unsigned(r(0)(14 downto 0)) /= 0 else
                  std_logic_vector(to_unsigned(min_slack_init, 15));
-
-
-    ------------------------------- MODULES INSTANTIATION -----------------------------
-
     rstn_int <= soft_rstn and rstn;
 
+
+    --------------------------------------------------------------------------------------------------------------------------------------------------------
+    -- COMPONENT INSTANTIATION -----------------------------------------------------------------------------------------------------------------------------
+    --------------------------------------------------------------------------------------------------------------------------------------------------------
     SLACK: if activate_slack = 1 generate
         slack_handler_inst : slack_handler 
         generic map(
@@ -144,12 +149,13 @@ begin
         --Tie signal
         error_from_comp <= '0';
     end generate NO_COMP;
-    -------------------------------------------- APB REGISTERS ----------------------------------------------------
+    --------------------------------------------------------------------------------------------------------------------------------------------------------
 
-    --Here the registers take their new values. It can be:
-    -- 1.- A change in the configuration register
-    -- 2.- Reset if the 31th bit of the configuration register is set to 1
-    -- 3.- Just update the counters from the slack handler
+
+
+    --------------------------------------------------------------------------------------------------------------------------------------------------------
+    -- APB INTERFACE ---------------------------------------------------------------------------------------------------------------------------------------
+    --------------------------------------------------------------------------------------------------------------------------------------------------------
     comb : process(rstn, r, apbi_psel_i, apbi_paddr_i, apbi_penable_i, apbi_pwrite_i, apbi_pwdata_i, regs_handler_o, r_error, error_from_comp)
         variable readdata : std_logic_vector(31 downto 0);
         variable v        : registers_vector(REGISTERS_NUMBER-1 downto 0);
@@ -159,12 +165,12 @@ begin
         v := r;
         -- select slave
         slave_index := apbi_paddr_i(SLV_INDEX_CEIL+1 downto 2);
-        -- read register
+        -- Read statistical registers
         readdata := (others => '0');
         if (apbi_psel_i and apbi_penable_i) = '1' and apbi_pwrite_i = '0' then
             readdata := r(to_integer(unsigned(slave_index)));
         end if;
-        -- write registers (only the first three so far)
+        -- Write registers configuration registers
         if (apbi_psel_i and apbi_pwrite_i) = '1' and unsigned(slave_index) = 0 then
             v(to_integer(unsigned(slave_index))) := apbi_pwdata_i;
         elsif (apbi_psel_i and apbi_pwrite_i) = '1' and unsigned(slave_index) = 1 then
@@ -173,18 +179,15 @@ begin
             v(to_integer(unsigned(slave_index))) := apbi_pwdata_i;
         end if;
 
-        -- update registers
         if rstn = '0' then
-        -- if systems reset set all registers to 0
             rin <= (others => (others => '0'));
-            -- Register containing minimum instructions difference should be reset to a high value
+            -- Register containing minimum instructions difference should be preset to a high value
             rin(12) <= (others => '1');
         elsif v(0)(31) = '1' then
-        -- if rst bit is set, data from slack handler and reset bit are set to 0
+        -- if softreset bit is set, data from slack handler and reset bit are set to 0
             rin <= (others => (others => '0'));
             -- Register containing minimum instructions difference should be reset to a high value
             rin(12) <= (others => '1');
-
             rin(0) <= v(0);
             rin(0)(31) <= '0';
         else
@@ -194,6 +197,7 @@ begin
             rin(0) <= v(0);
             rin(1) <= v(1);
             rin(2) <= v(2);
+            -- To observe when an error is produced
             if v(13) = x"00000000" and error_from_comp = '1' then
                 rin(13) <= v(5); 
             else
@@ -216,9 +220,9 @@ begin
     begin
         if rising_edge(clk) then r <= rin; end if;
     end process;
+    --------------------------------------------------------------------------------------------------------------------------------------------------------
 
     ------------------- ERROR -------------------
-
     error_o <= error_from_sh or error_from_comp;
     --error_reg : process(clk)
     --begin
