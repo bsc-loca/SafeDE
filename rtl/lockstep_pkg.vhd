@@ -13,44 +13,51 @@ package lockstep_pkg is
     -- Components definitions 
     component apb_lockstep is
         generic (
-            -- comparator genercis
-            min_slack_init  : integer := 100;  -- Number of cycles that the core is going to be stalled
-            max_slack_init  : integer := 500;  -- When one core is 'max_instructions_differece" instrucctions ahead of the other, it is stalled
-            -- config
-            activate_slack      : integer := 1;          -- It activates the module that controls the max and min instruction that one core is ahead of the other
-            activate_comparator : integer := 1;          -- It activates the module that compares results between both cores
-            -- ahb bus
-            BUS_LENGTH : integer := 128
-        );  
+            register_output     : integer := 0;   -- If is 1, the output is registered. Can be used to improve timing
+            min_slack_init      : integer := 20;  -- If no min_slack is configured through the API, this will be take as the default minimum threshold
+            activate_max_slack  : integer := 0    -- When it is set to 1, the module also can be configured through the API o control that the difference of instructions
+        );                                        -- between both cores is never bigger than a maximum threshold. Otherwise only the minimum threshold is taken on account.
         port (
             rstn           : in  std_ulogic;
             clk            : in  std_ulogic;
             -- apb signals
-            apbi_psel_i     : in  std_logic;    
-            apbi_paddr_i    : in  std_logic_vector(31 downto 0);    
-            apbi_penable_i  : in  std_logic;    
-            apbi_pwrite_i   : in  std_logic;    
-            apbi_pwdata_i   : in  std_logic_vector(31 downto 0);    
-            apbo_prdata_o   : out std_logic_vector(31 downto 0);    
-            -- ahb signals ----------------
-            ahbmo1_write_i : in  std_logic;
-            ahbmo2_write_i : in  std_logic;
-            ahbmo1_wdata_i : in  std_logic_vector(BUS_LENGTH-1 downto 0);
-            ahbmo2_wdata_i : in  std_logic_vector(BUS_LENGTH-1 downto 0);
-            ahbmo1_trans_i : in  std_logic;
-            ahbmo2_trans_i : in  std_logic;
-            ahbmi_rdata_i  : in  std_logic_vector(BUS_LENGTH-1 downto 0);
-            ahbmi_hresp_i  : in  std_logic_vector(1 downto 0);
-            ahbmi_ready_i  : in  std_logic;
-            ahb_access_i   : in std_logic_vector(1 downto 0);
+            apbi_psel_i    : in  std_logic;                       
+            apbi_paddr_i   : in  std_logic_vector(31 downto 0);                      
+            apbi_penable_i : in  std_logic;                     
+            apbi_pwrite_i  : in  std_logic;
+            apbi_pwdata_i  : in  std_logic_vector(31 downto 0);                   
+            apbo_prdata_o  : out std_logic_vector(31 downto 0);                  
             -- lockstep signals 
-            icnt1_i          : in  std_logic_vector(1 downto 0);    -- Instruction counter from the first core
-            icnt2_i          : in  std_logic_vector(1 downto 0);    -- Instruction counter from the second core
-            stall1_o         : out std_logic;                       -- Signal to stall the first core
-            stall2_o         : out std_logic;                       -- Signal to stall the second core
-            error_o          : out std_logic                        -- Reset the program if the result of both ALUs does not match
-        );  
+            icnt1_i        : in  std_logic_vector(1 downto 0);    -- Instruction counter from the first core
+            icnt2_i        : in  std_logic_vector(1 downto 0);    -- Instruction counter from the second core
+            stall1_o       : out std_logic;                       -- Signal to stall the first core
+            stall2_o       : out std_logic;                       -- Signal to stall the second core
+            error_o        : out std_logic                        -- Reset the program if the result of both ALUs does not match
+        );
     end component apb_lockstep;
+
+    component slack_handler_max is
+        generic (
+            en_cycles_limit  : integer := 100;
+            REGISTERS_NUMBER : integer := 14       -- Number of registers
+        );
+        port (
+            clk            : in  std_logic;    
+            rstn           : in  std_logic;
+            enable_core1_i : in  std_logic;
+            enable_core2_i : in  std_logic;
+            icnt1_i        : in  std_logic_vector(1 downto 0);                  -- Instruction counter from the first core
+            icnt2_i        : in  std_logic_vector(1 downto 0);                  -- Instruction counter from the second core
+            max_slack_i    : in  std_logic_vector(14 downto 0);
+            min_slack_i    : in  std_logic_vector(14 downto 0);
+            regs_in        : in  registers_vector(REGISTERS_NUMBER-3 downto 3); -- Registers of the module (in)
+            regs_out       : out registers_vector(REGISTERS_NUMBER-3 downto 3); -- Registers of the module (out) 
+            c1_ahead_c2_o  : out std_logic;                                     -- It is 1 when core1 is ahead of core2 and the other way round
+            stall1_o       : out std_logic;                                     -- Signal to stall the first core
+            stall2_o       : out std_logic;                                     -- Signal to stall the second core
+            error_o        : out std_logic                                      -- Signal to assert an error
+        );
+    end component slack_handler_max;
 
     component slack_handler is
         generic (
@@ -64,7 +71,6 @@ package lockstep_pkg is
             enable_core2_i : in  std_logic;
             icnt1_i        : in  std_logic_vector(1 downto 0);                  -- Instruction counter from the first core
             icnt2_i        : in  std_logic_vector(1 downto 0);                  -- Instruction counter from the second core
-            max_slack_i    : in  std_logic_vector(15 downto 0);
             min_slack_i    : in  std_logic_vector(14 downto 0);
             regs_in        : in  registers_vector(REGISTERS_NUMBER-3 downto 3); -- Registers of the module (in)
             regs_out       : out registers_vector(REGISTERS_NUMBER-3 downto 3); -- Registers of the module (out) 

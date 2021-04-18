@@ -1,6 +1,6 @@
 -- -----------------------------------------------
 -- Project Name   : De-RISC
--- File           : slack_handler_min.vhd
+-- File           : slack_handler.vhd
 -- Organization   : Barcelona Supercomputing Center
 -- Author(s)      : Francisco Bas
 -- Email(s)       : francisco.basjalon@bsc.es
@@ -19,7 +19,7 @@ use ieee.math_real.all;
 library bsc;
 use bsc.lockstep_pkg.all;
 
-entity slack_handler is
+entity slack_handler_max is
     generic(
         en_cycles_limit  : integer := 100;  -- Max time allow from the activation of one to the activation of the other
         REGISTERS_NUMBER : integer := 10    -- Number of registers
@@ -31,6 +31,7 @@ entity slack_handler is
         enable_core2_i : in  std_logic;
         icnt1_i        : in  std_logic_vector(1 downto 0);                  -- Instruction counter from the first core
         icnt2_i        : in  std_logic_vector(1 downto 0);                  -- Instruction counter from the second core
+        max_slack_i    : in  std_logic_vector(14 downto 0);
         min_slack_i    : in  std_logic_vector(14 downto 0);
         regs_in        : in  registers_vector(REGISTERS_NUMBER-1 downto 3); -- Registers of the module (in)
         regs_out       : out registers_vector(REGISTERS_NUMBER-1 downto 3); -- Registers of the module (out) 
@@ -41,7 +42,7 @@ entity slack_handler is
         );  
 end;
 
-architecture rtl of slack_handler is
+architecture rtl of slack_handler_max is
 
     --------------------------------------------------------------------------------------------------------------------------------------------------------
     -- SIGNALS ---------------------------------------------------------------------------------------------------------------------------------------------
@@ -142,8 +143,9 @@ begin
 
     -- TODO: total cycles start at a different time
     -- It adds it cycle the instruction difference between cores. This way, the mean can be computed dividing by the total cycles.
-    n_accumulated_inst_diff <= r_accumulated_inst_diff + instruction_difference when enable = '1' else
+    n_accumulated_inst_diff <= r_accumulated_inst_diff + instruction_difference when (enable_core1_i and enable_core2_i) = '1' else
                                r_accumulated_inst_diff; 
+
 
 
     -- This code calculates the minimum instruction difference along the execution:
@@ -158,7 +160,7 @@ begin
                 r_activate_minimum_inst_comp <= '0';
             else
                 if (r_activate_minimum_inst_comp = '0') then
-                    if (enable = '1' and n_stall_fsm = not_stalled) then
+                    if (enable_core1_i = '1' and enable_core2_i = '1' and n_stall_fsm = not_stalled) then
                         r_activate_minimum_inst_comp <= '1';
                     end if;
                 elsif (enable_core1_i = '0' or enable_core2_i = '0') then
@@ -172,13 +174,16 @@ begin
                        r_min_inst_diff;
     --------------------------------------------------------------------------------------------------------------------------------------------------------
 
+
     --------------------------------------------------------------------------------------------------------------------------------------------------------
-    -- LOCKSTEP --------------------------------------------------------------------------------------------------------------------------------------------
+    -- LOCKSTEP ----------------------------------------------------------------------------------------------------------------------------------------
     --------------------------------------------------------------------------------------------------------------------------------------------------------
 
-    -- Only when both cores are in the critical sections the lockstep is enable
-    enable <= enable_core1_i and enable_core2_i;
-
+    -- If the leading core is enable, enable is set to 1 and stalls can occur
+    -- This way, when the leading core finishes the critical section and the trailing core exceeds the lower threshold, the trailing core is not stalled.
+    -- Also, if the leading core enters the critical section and the trailing core is not active yet, if the max threshold is reach, core1 can be stalled
+    enable <= '1' when (core1_ahead_core2 and enable_core1_i) = '1' or (not(core1_ahead_core2) and enable_core2_i) = '1' else
+              '0';
 
     -- It calculates the number of executed instructions for both cores using the insturction counter of each core
     -- intruction counter icnt has a bit per lane (both bits)
@@ -191,11 +196,11 @@ begin
                         r_executed_inst2;
 
 
-   -- If it is 1 means that core1 is ahead of core 2 and viceversa
+    -- If it is 1 means that core1 is ahead of core 2 and viceversa
     core1_ahead_core2 <= '1' when n_executed_inst1 >= n_executed_inst2 else
                          '0';
 
-    -- The instruction different is calculated 
+    -- The instruction difference is calculated 
     -- Since this signals are unsigned, the value of instruction_difference will be correct even if overflow is produced
     instruction_difference <= n_executed_inst1(15 downto 0) - n_executed_inst2(15 downto 0) when core1_ahead_core2 = '1' else
                               n_executed_inst2(15 downto 0) - n_executed_inst1(15 downto 0); 
@@ -222,38 +227,62 @@ begin
     
     
     -- FSM to stall the cores when upper threshold or lower threshold is exceeded
-    process(core1_ahead_core2, stall_fsm, instruction_difference, enable, min_slack_i)
+    process(core1_ahead_core2, stall_fsm, instruction_difference, enable, enable_core1_i, enable_core2_i, max_slack_i, min_slack_i)
     begin
         n_stall_fsm <= stall_fsm;
         stall1 <= '0';
         stall2 <= '0';
         case stall_fsm is
             when not_stalled =>  -- No core is stalled, check if any core has to be stalled
-                 if enable = '1' then
-                    if instruction_difference < unsigned(min_slack_i) then
+                if enable = '1' and unsigned(max_slack_i) /= 0 then  -- If max_slack is 0 then no stall is applied when instructions difference > max_slack
+                    if instruction_difference > unsigned(max_slack_i) then
                         if core1_ahead_core2 = '1' then
-                            n_stall_fsm <= stalled2;  -- Could happen that the enable signal is active but the trailing core has not enter the critical section yet.
-                            stall2 <= '1';
-                        else
                             n_stall_fsm <= stalled1;
                             stall1 <= '1';
+                        else
+                            n_stall_fsm <= stalled2;
+                            stall2 <= '1';
+                        end if;
+                    end if;
+                end if;
+                if enable = '1' then
+                    if instruction_difference < unsigned(min_slack_i) then
+                        if core1_ahead_core2 = '1' then
+                            if enable_core1_i = '1' then  -- It has to be checked that the trailing core is active since the enable signal is active when the trail core is active
+                                n_stall_fsm <= stalled2;  -- Could happen that the enable signal is active but the trailing core has not enter the critical section yet.
+                                stall2 <= '1';
+                            end if;
+                        else
+                            if enable_core1_i = '1' then
+                                n_stall_fsm <= stalled1;
+                                stall1 <= '1';
+                            end if;
                         end if;
                     end if;
                 end if;
             when stalled1  => -- Core1 is stalled, it asserts the stall signal and check wether it has to be "unstalled" or not
                 stall1 <= '1';
-                if (instruction_difference >= unsigned(min_slack_i) and core1_ahead_core2 = '0') or enable = '0'  then
+                --if ((instruction_difference < unsigned(min_slack_i) and core1_ahead_core2 = '1') or (instruction_difference > unsigned(max_slack_i) and core1_ahead_core2 = '0')) and enable = '1'  then
+                --    n_stall_fsm <= stalled2;
+                --    stall1 <= '0';
+                --    stall2 <= '1';
+                if (instruction_difference <= unsigned(max_slack_i) and core1_ahead_core2 = '1') or (instruction_difference >= unsigned(min_slack_i) and core1_ahead_core2 = '0') or enable = '0'  then
                     n_stall_fsm <= not_stalled;
                     stall1 <= '0';
                 end if;
             when stalled2  => -- Core2 is stalled, it asserts the stall signal and check wether it has to be "unstalled" or not
                 stall2 <= '1';
-                if (instruction_difference >= unsigned(min_slack_i) and core1_ahead_core2 = '1') or enable = '0'  then
+                --if ((instruction_difference < unsigned(min_slack_i) and core1_ahead_core2 = '0') or (instruction_difference > unsigned(max_slack_i) and core1_ahead_core2 = '1')) and enable = '1' then
+                --    n_stall_fsm <= stalled1;
+                --    stall1 <= '1';
+                --    stall2 <= '0';
+                if (instruction_difference <= unsigned(max_slack_i) and core1_ahead_core2 = '0') or (instruction_difference >= unsigned(min_slack_i) and core1_ahead_core2 = '1') or enable = '0'  then
                     n_stall_fsm <= not_stalled;
                     stall2 <= '0';
                 end if;
         end case;
     end process;
+
 
     --------------------------------------------------------------------------------------------------------------------------------------------------------
     -- ERROR DETECTION -------------------------------------------------------------------------------------------------------------------------------------

@@ -8,15 +8,10 @@ use bsc.lockstep_pkg.all;
 
 entity apb_lockstep is
     generic (
-        -- genercis
-        min_slack_init  : integer := 20;      -- If no min_slack is configured through the API, this will be take as the default minimum threshold
-        max_slack_init  : integer := 20;      -- If no min_slack is configured through the API, this will be take as the default minimum threshold
-        -- config
-        activate_slack      : integer := 1;   -- It activates the module that controls the max and min instruction that one core is ahead of the other
-        activate_comparator : integer := 1;   -- It activates the module that compares results between both cores
-        -- ahb bus
-        BUS_LENGTH : integer := 128
-    );
+        register_output     : integer := 0;   -- If is 1, the output is registered. Can be used to improve timing
+        min_slack_init      : integer := 20;  -- If no min_slack is configured through the API, this will be take as the default minimum threshold
+        activate_max_slack  : integer := 0    -- When it is set to 1, the module also can be configured through the API o control that the difference of instructions
+    );                                        -- between both cores is never bigger than a maximum threshold. Otherwise only the minimum threshold is taken on account.
     port (
         rstn           : in  std_ulogic;
         clk            : in  std_ulogic;
@@ -27,17 +22,6 @@ entity apb_lockstep is
         apbi_pwrite_i  : in  std_logic;
         apbi_pwdata_i  : in  std_logic_vector(31 downto 0);                   
         apbo_prdata_o  : out std_logic_vector(31 downto 0);                  
-        -- ahb signals ----------------
-        ahbmo1_write_i : in  std_logic;
-        ahbmo2_write_i : in  std_logic;
-        ahbmo1_wdata_i : in  std_logic_vector(BUS_LENGTH-1 downto 0);
-        ahbmo2_wdata_i : in  std_logic_vector(BUS_LENGTH-1 downto 0);
-        ahbmo1_trans_i : in  std_logic;
-        ahbmo2_trans_i : in  std_logic;
-        ahbmi_rdata_i  : in  std_logic_vector(BUS_LENGTH-1 downto 0);
-        ahbmi_hresp_i  : in  std_logic_vector(1 downto 0);
-        ahbmi_ready_i  : in  std_logic;
-        ahb_access_i   : in std_logic_vector(1 downto 0);
         -- lockstep signals 
         icnt1_i        : in  std_logic_vector(1 downto 0);    -- Instruction counter from the first core
         icnt2_i        : in  std_logic_vector(1 downto 0);    -- Instruction counter from the second core
@@ -49,26 +33,27 @@ end;
 
 architecture rtl of apb_lockstep is
 
-    constant REGISTERS_NUMBER : integer := 15; -- minimum 2
-    constant SLV_INDEX_CEIL : integer := integer(ceil(log2(real(REGISTERS_NUMBER))));
+    constant REGISTERS_NUMBER : integer := 13; -- minimum 2
+    constant SLV_INDEX_CEIL   : integer := integer(ceil(log2(real(REGISTERS_NUMBER))));
 
     -- registers signals
-    signal r, rin     : registers_vector(REGISTERS_NUMBER-1 downto 0) ;
-    signal regs_handler_o : registers_vector(REGISTERS_NUMBER-3 downto 3) ;
+    signal r, rin         : registers_vector(REGISTERS_NUMBER-1 downto 0) ;
+    signal regs_handler_o : registers_vector(REGISTERS_NUMBER-1 downto 3) ;
 
     -- configuration signals
-    signal max_slack : std_logic_vector(15 downto 0);
-    signal min_slack : std_logic_vector(14 downto 0);
+    signal max_slack, min_slack : std_logic_vector(14 downto 0);
     signal enable_core1, enable_core2 : std_logic;
 
     -- error signals
-    signal error_from_sh, error_from_comp, r_error : std_logic;
-
-    -- Interconect signals
-    signal c1_ahead_c2_from_sh : std_logic;
+    signal error_from_sh : std_logic;
 
     -- Soft reset
     signal soft_rstn, rstn_int : std_logic;
+    
+    -- Global enable
+    signal global_enable : std_logic;
+    signal r_stall1, r_stall2, stall1 , stall2 : std_logic;
+
 
 begin
     
@@ -76,12 +61,13 @@ begin
     -- CONFIGURATION REGISTERS -----------------------------------------------------------------------------------------------------------------------------
     --------------------------------------------------------------------------------------------------------------------------------------------------------
     -- The values for the configuration registers are taken from the APB interface
-    enable_core1 <= r(1)(0); -- Set to 1 when the core1 enters in the critical section
-    enable_core2 <= r(2)(0); -- Set to 1 when the core1 enters in the critical section
+    global_enable <= r(0)(30);
+    enable_core1  <= r(1)(0); -- Set to 1 when the core1 enters in the critical section
+    enable_core2  <= r(2)(0); -- Set to 1 when the core1 enters in the critical section
     -- If no max_slack is especified through the API, the signal max_slack will get the value 0 
     -- and there won't be a upper threshold, just a lower one (minimum threshold).
-    max_slack <= r(0)(30 downto 15) when unsigned(r(0)(30 downto 15)) /= 0 else
-                 std_logic_vector(to_unsigned(0, 16));
+    max_slack <= r(0)(29 downto 15) when unsigned(r(0)(29 downto 15)) /= 0 else
+                 std_logic_vector(to_unsigned(0, 15));
     -- If no min_slack is specified throuhg the API, the signal min_slack will take the value of
     -- the generic min_slack_init 
     min_slack <= r(0)(14 downto 0) when unsigned(r(0)(14 downto 0)) /= 0 else
@@ -92,8 +78,14 @@ begin
     --------------------------------------------------------------------------------------------------------------------------------------------------------
     -- COMPONENT INSTANTIATION -----------------------------------------------------------------------------------------------------------------------------
     --------------------------------------------------------------------------------------------------------------------------------------------------------
-    SLACK: if activate_slack = 1 generate
-        slack_handler_inst : slack_handler 
+    -- This component is encharged of handling the instruction difference between both cores or slack. When the slack is out of the allowed limits
+    -- it sets to 1 the stall signal of the core that has to be stalled.
+
+    -- Depending on the generic activate_max_slack, two different modules will be instanciated. This modules are almost the same. The only difference
+    -- between both is that the first one can be configured with an upper threshold that will be used to stall the heading core when the difference of 
+    -- instruction is bigger than this thershold.
+    MAX_SLACK_MODULE: if activate_max_slack = 1 generate
+        slack_handler_inst : slack_handler_max 
         generic map(
             en_cycles_limit  => 100,
             REGISTERS_NUMBER => REGISTERS_NUMBER 
@@ -107,56 +99,69 @@ begin
             icnt2_i        => icnt2_i,
             min_slack_i    => min_slack,
             max_slack_i    => max_slack, 
-            regs_in        => r(REGISTERS_NUMBER-3 downto 3),
+            regs_in        => r(REGISTERS_NUMBER-1 downto 3),
             regs_out       => regs_handler_o,
-            c1_ahead_c2_o  => c1_ahead_c2_from_sh,
-            stall1_o       => stall1_o, 
-            stall2_o       => stall2_o,
+            stall1_o       => stall1, 
+            stall2_o       => stall2,
             error_o        => error_from_sh
             );
-    end generate SLACK;
+    end generate MAX_SLACK_MODULE;
 
-
-    COMP: if activate_comparator = 1 generate
-        comparator_inst : comparator
+    SLACK_MODULE: if activate_max_slack = 0 generate
+        slack_handler_inst : slack_handler 
         generic map(
-            WRITE_ENTRIES => 16,
-            BUS_LENGTH    => BUS_LENGTH
+            en_cycles_limit  => 100,
+            REGISTERS_NUMBER => REGISTERS_NUMBER 
             )
         port map(
             clk            => clk,
             rstn           => rstn_int,
-            -- ahb signals ----------------
-            ahbmo1_write_i => ahbmo1_write_i,  
-            ahbmo2_write_i => ahbmo2_write_i,  
-            ahbmo1_wdata_i => ahbmo1_wdata_i,  
-            ahbmo2_wdata_i => ahbmo2_wdata_i,  
-            ahbmo1_trans_i => ahbmo1_trans_i,  
-            ahbmo2_trans_i => ahbmo2_trans_i,  
-            ahbmi_rdata_i  => ahbmi_rdata_i,  
-            ahbmi_hresp_i  => ahbmi_hresp_i,   
-            ahbmi_ready_i  => ahbmi_ready_i,   
-            ahb_access_i   => ahb_access_i,
-            -------------------------------
             enable_core1_i => enable_core1,
             enable_core2_i => enable_core2,
-            c1_ahead_c2_i  => c1_ahead_c2_from_sh,
-            error_o        => error_from_comp
+            icnt1_i        => icnt1_i,
+            icnt2_i        => icnt2_i,
+            min_slack_i    => min_slack,
+            regs_in        => r(REGISTERS_NUMBER-1 downto 3),
+            regs_out       => regs_handler_o,
+            stall1_o       => stall1, 
+            stall2_o       => stall2,
+            error_o        => error_from_sh
             );
-    end generate COMP;
+    end generate SLACK_MODULE;
 
-    NO_COMP: if activate_comparator = 0 generate
-        --Tie signal
-        error_from_comp <= '0';
-    end generate NO_COMP;
+    
+    -- Depending on the generic register_output, the output will be registered or not.
+    -- This is useful to break the combiantional path and prevent timing problems.
+    NO_REGISTERED_OUTPUT: if register_output = 0 generate
+        stall1_o <= stall1 and global_enable;
+        stall2_o <= stall2 and global_enable;
+    end generate NO_REGISTERED_OUTPUT;
+
+    REGISTERED_OUTPUT: if activate_max_slack = 1 generate
+        process(clk)
+        begin
+            if rising_edge(clk) then
+                if rstn = '0' then
+                    r_stall1  <= '0';                     
+                    r_stall2  <= '0';                     
+       	        else
+                    r_stall1  <= stall1;        -- Register used to detect the flank 
+                    r_stall2  <= stall2;        -- Register used to detect the flank 
+                end if;
+            end if;   
+        end process;
+        stall1 <= r_stall1 and global_enable;
+        stall2 <= r_stall2 and global_enable;
+    end generate REGISTERED_OUTPUT;
+
+        
     --------------------------------------------------------------------------------------------------------------------------------------------------------
-
 
 
     --------------------------------------------------------------------------------------------------------------------------------------------------------
     -- APB INTERFACE ---------------------------------------------------------------------------------------------------------------------------------------
     --------------------------------------------------------------------------------------------------------------------------------------------------------
-    comb : process(rstn, r, apbi_psel_i, apbi_paddr_i, apbi_penable_i, apbi_pwrite_i, apbi_pwdata_i, regs_handler_o, r_error, error_from_comp)
+    comb : process(rstn, r, apbi_psel_i, apbi_paddr_i, apbi_penable_i, apbi_pwrite_i, apbi_pwdata_i, regs_handler_o)
         variable readdata : std_logic_vector(31 downto 0);
         variable v        : registers_vector(REGISTERS_NUMBER-1 downto 0);
         variable slave_index : std_logic_vector(SLV_INDEX_CEIL-1 downto 0);
@@ -192,23 +197,11 @@ begin
             rin(0)(31) <= '0';
         else
             -- change registers with data from slack handler
-            rin(REGISTERS_NUMBER-3 downto 3)  <= regs_handler_o;
+            rin(REGISTERS_NUMBER-1 downto 3)  <= regs_handler_o;
             -- configuration register shouldn't be changed by the slack handler
             rin(0) <= v(0);
             rin(1) <= v(1);
             rin(2) <= v(2);
-            -- To observe when an error is produced
-            if v(13) = x"00000000" and error_from_comp = '1' then
-                rin(13) <= v(5); 
-            else
-                rin(13) <= v(13);
-            end if;
-            if error_from_comp = '1' then
-                error_count := unsigned(v(14)) + 1;
-                rin(14) <= std_logic_vector(error_count);
-            else
-                rin(14) <= v(14);
-            end if;
         end if;
         apbo_prdata_o <= readdata; -- drive apb read bus
         -- soft reset
@@ -223,17 +216,7 @@ begin
     --------------------------------------------------------------------------------------------------------------------------------------------------------
 
     ------------------- ERROR -------------------
-    error_o <= error_from_sh or error_from_comp;
-    --error_reg : process(clk)
-    --begin
-    --    if rising_edge(clk) then 
-    --        if rst = '0' then
-    --            r_error <= '0';
-    --        else
-    --            r_error <= r_error or error_from_comp;
-    --        end if;
-    --    end if;
-    --end process;
+    error_o <= error_from_sh;
 
     -- Verification -----------------
     -- pragma translate_off
