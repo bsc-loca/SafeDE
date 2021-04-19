@@ -15,7 +15,7 @@ entity apb_lockstep is
     port (
         rstn           : in  std_ulogic;
         clk            : in  std_ulogic;
-        -- apb signals
+        -- APB signals
         apbi_psel_i    : in  std_logic;                       
         apbi_paddr_i   : in  std_logic_vector(31 downto 0);                      
         apbi_penable_i : in  std_logic;                     
@@ -133,11 +133,13 @@ begin
     -- Depending on the generic register_output, the output will be registered or not.
     -- This is useful to break the combiantional path and prevent timing problems.
     NO_REGISTERED_OUTPUT: if register_output = 0 generate
-        stall1_o <= stall1 and global_enable;
-        stall2_o <= stall2 and global_enable;
+        r_stall1 <= stall1;
+        r_stall2 <= stall2;
+        stall1_o <= r_stall1 and global_enable;
+        stall2_o <= r_stall2 and global_enable;
     end generate NO_REGISTERED_OUTPUT;
 
-    REGISTERED_OUTPUT: if activate_max_slack = 1 generate
+    REGISTERED_OUTPUT: if register_output = 1 generate
         process(clk)
         begin
             if rising_edge(clk) then
@@ -150,8 +152,8 @@ begin
                 end if;
             end if;   
         end process;
-        stall1 <= r_stall1 and global_enable;
-        stall2 <= r_stall2 and global_enable;
+        stall1_o <= r_stall1 and global_enable;
+        stall2_o <= r_stall2 and global_enable;
     end generate REGISTERED_OUTPUT;
 
         
@@ -165,7 +167,6 @@ begin
         variable readdata : std_logic_vector(31 downto 0);
         variable v        : registers_vector(REGISTERS_NUMBER-1 downto 0);
         variable slave_index : std_logic_vector(SLV_INDEX_CEIL-1 downto 0);
-        variable error_count : unsigned(31 downto 0) := x"00000000";
     begin
         v := r;
         -- select slave

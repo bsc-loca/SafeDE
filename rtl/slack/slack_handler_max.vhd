@@ -1,6 +1,6 @@
 -- -----------------------------------------------
 -- Project Name   : De-RISC
--- File           : slack_handler.vhd
+-- File           : slack_handler_max.vhd
 -- Organization   : Barcelona Supercomputing Center
 -- Author(s)      : Francisco Bas
 -- Email(s)       : francisco.basjalon@bsc.es
@@ -35,7 +35,6 @@ entity slack_handler_max is
         min_slack_i    : in  std_logic_vector(14 downto 0);
         regs_in        : in  registers_vector(REGISTERS_NUMBER-1 downto 3); -- Registers of the module (in)
         regs_out       : out registers_vector(REGISTERS_NUMBER-1 downto 3); -- Registers of the module (out) 
-        c1_ahead_c2_o  : out std_logic;                                     -- It is 1 when core1 is ahead of core2 and the other way round
         stall1_o       : out std_logic;                                     -- Signal to stall the first core
         stall2_o       : out std_logic;                                     -- Signal to stall the second core
         error_o        : out std_logic                                      -- Signal to assert an error
@@ -49,9 +48,14 @@ architecture rtl of slack_handler_max is
     --------------------------------------------------------------------------------------------------------------------------------------------------------
 
     -- LOCKSTEP SIGNALS -------------------------------------------------------------------------------
+    -- Signals to implement the register to calculate the number of executed instructions
+    signal r_executed_inst1, n_executed_inst1 : unsigned(31 downto 0);
+    signal r_executed_inst2, n_executed_inst2 : unsigned(31 downto 0);
+
     -- Signals to compare executed instructions of both cores
     signal core1_ahead_core2      : std_logic;
-    signal instruction_difference : unsigned(15 downto 0);  
+    signal r_enable_core1, r_enable_core2 : std_logic;
+    signal instruction_difference : unsigned(14 downto 0);  
 
     -- Signals to stall each of the cores
     signal stall1, stall2 : std_logic;
@@ -74,9 +78,6 @@ architecture rtl of slack_handler_max is
     -- Signal to count the cycles lockstep has been active
     signal n_total_cycles, r_total_cycles: unsigned(31 downto 0);
 
-    -- Signals to implement the register to calculate the number of executed instructions
-    signal r_executed_inst1, n_executed_inst1 : unsigned(31 downto 0);
-    signal r_executed_inst2, n_executed_inst2 : unsigned(31 downto 0);
 
     -- Signals to count the number of times that each core is stalled
     -- A flank detector has to be implemented for that purpose
@@ -92,7 +93,7 @@ architecture rtl of slack_handler_max is
 
     -- Signals to implement the register to store max instruction different along the execution
     signal r_max_inst_diff, n_max_inst_diff : unsigned(31 downto 0);
-    constant fill_zeros : unsigned(15 downto 0) := to_unsigned(0, 16);
+    constant fill_zeros : unsigned(16 downto 0) := to_unsigned(0, 17);
 
     -- Signals to implement the register to store min instruction different along the execution
     signal r_min_inst_diff, n_min_inst_diff : unsigned(31 downto 0);
@@ -138,14 +139,12 @@ begin
                         r_total_cycles;
 
     -- It calculates the maximum difference of instructions along the execution starting when both cores are in the critical section
-    n_max_inst_diff <= (fill_zeros & instruction_difference) when (r_max_inst_diff(15 downto 0) < instruction_difference) and enable = '1' else
+    n_max_inst_diff <= (fill_zeros & instruction_difference) when (r_max_inst_diff(14 downto 0) < instruction_difference) and enable = '1' else
                        r_max_inst_diff;
 
-    -- TODO: total cycles start at a different time
     -- It adds it cycle the instruction difference between cores. This way, the mean can be computed dividing by the total cycles.
-    n_accumulated_inst_diff <= r_accumulated_inst_diff + instruction_difference when (enable_core1_i and enable_core2_i) = '1' else
+    n_accumulated_inst_diff <= r_accumulated_inst_diff + instruction_difference when enable = '1' else
                                r_accumulated_inst_diff; 
-
 
 
     -- This code calculates the minimum instruction difference along the execution:
@@ -170,7 +169,7 @@ begin
         end if;
     end process;
 
-    n_min_inst_diff <= (fill_zeros & instruction_difference) when (r_min_inst_diff(15 downto 0) > instruction_difference) and r_activate_minimum_inst_comp = '1' else
+    n_min_inst_diff <= (fill_zeros & instruction_difference) when (r_min_inst_diff(14 downto 0) > instruction_difference) and r_activate_minimum_inst_comp = '1' else
                        r_min_inst_diff;
     --------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -196,14 +195,30 @@ begin
                         r_executed_inst2;
 
 
-    -- If it is 1 means that core1 is ahead of core 2 and viceversa
-    core1_ahead_core2 <= '1' when n_executed_inst1 >= n_executed_inst2 else
-                         '0';
+    -- The first core that reaches the critical section is the core ahead
+    process(clk)
+    begin
+        if rising_edge(clk) then
+            if rstn = '0' then
+                r_enable_core1 <= '0'; 
+                r_enable_core2 <= '0'; 
+            else 
+                r_enable_core1 <= enable_core1_i;
+                r_enable_core2 <= enable_core2_i;
+            end if;
+            if enable_core1_i = '1' and r_enable_core1 = '0' and enable_core2_i = '0' then
+                core1_ahead_core2 <= '1';
+            elsif enable_core1_i = '0' and r_enable_core2 = '0' and enable_core2_i = '1' then
+                core1_ahead_core2 <= '0';
+            end if;
+        end if;
+    end process;
+
 
     -- The instruction difference is calculated 
     -- Since this signals are unsigned, the value of instruction_difference will be correct even if overflow is produced
-    instruction_difference <= n_executed_inst1(15 downto 0) - n_executed_inst2(15 downto 0) when core1_ahead_core2 = '1' else
-                              n_executed_inst2(15 downto 0) - n_executed_inst1(15 downto 0); 
+    instruction_difference <= n_executed_inst1(14 downto 0) - n_executed_inst2(14 downto 0) when core1_ahead_core2 = '1' else
+                              n_executed_inst2(14 downto 0) - n_executed_inst1(14 downto 0); 
 
     -- REGISTERS
     process(clk)
@@ -235,7 +250,7 @@ begin
         case stall_fsm is
             when not_stalled =>  -- No core is stalled, check if any core has to be stalled
                 if enable = '1' and unsigned(max_slack_i) /= 0 then  -- If max_slack is 0 then no stall is applied when instructions difference > max_slack
-                    if instruction_difference > unsigned(max_slack_i) then
+                    if instruction_difference >= unsigned(max_slack_i) then
                         if core1_ahead_core2 = '1' then
                             n_stall_fsm <= stalled1;
                             stall1 <= '1';
@@ -246,9 +261,9 @@ begin
                     end if;
                 end if;
                 if enable = '1' then
-                    if instruction_difference < unsigned(min_slack_i) then
+                    if instruction_difference <= unsigned(min_slack_i) then
                         if core1_ahead_core2 = '1' then
-                            if enable_core1_i = '1' then  -- It has to be checked that the trailing core is active since the enable signal is active when the trail core is active
+                            if enable_core2_i = '1' then  -- It has to be checked that the trailing core is active since the enable signal is active when the trail core is active
                                 n_stall_fsm <= stalled2;  -- Could happen that the enable signal is active but the trailing core has not enter the critical section yet.
                                 stall2 <= '1';
                             end if;
@@ -266,7 +281,7 @@ begin
                 --    n_stall_fsm <= stalled2;
                 --    stall1 <= '0';
                 --    stall2 <= '1';
-                if (instruction_difference <= unsigned(max_slack_i) and core1_ahead_core2 = '1') or (instruction_difference >= unsigned(min_slack_i) and core1_ahead_core2 = '0') or enable = '0'  then
+                if (instruction_difference < unsigned(max_slack_i) and core1_ahead_core2 = '1') or (instruction_difference > unsigned(min_slack_i) and core1_ahead_core2 = '0') or enable = '0'  then
                     n_stall_fsm <= not_stalled;
                     stall1 <= '0';
                 end if;
@@ -276,7 +291,7 @@ begin
                 --    n_stall_fsm <= stalled1;
                 --    stall1 <= '1';
                 --    stall2 <= '0';
-                if (instruction_difference <= unsigned(max_slack_i) and core1_ahead_core2 = '0') or (instruction_difference >= unsigned(min_slack_i) and core1_ahead_core2 = '1') or enable = '0'  then
+                if (instruction_difference < unsigned(max_slack_i) and core1_ahead_core2 = '0') or (instruction_difference > unsigned(min_slack_i) and core1_ahead_core2 = '1') or enable = '0'  then
                     n_stall_fsm <= not_stalled;
                     stall2 <= '0';
                 end if;
@@ -316,8 +331,6 @@ begin
     -- Assign stalls to its outputs
     stall1_o <= stall1;
     stall2_o <= stall2;
-
-    c1_ahead_c2_o <= core1_ahead_core2;  -- Needed for the comparator
 
     -- Pass back the value of the internal registers to the apb interface
     process(regs_in, n_times_stalled_core1, n_times_stalled_core2, n_cycles_stalled_core1, n_cycles_stalled_core2, n_total_cycles, n_executed_inst1, n_executed_inst2, n_max_inst_diff, n_accumulated_inst_diff, n_min_inst_diff)
