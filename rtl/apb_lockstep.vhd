@@ -8,9 +8,9 @@ use bsc.lockstep_pkg.all;
 
 entity apb_lockstep is
     generic (
+        lanes_number        : integer := 2;   -- Number of lanes of each core (1 icnt bit per lane)
         register_output     : integer := 0;   -- If is 1, the output is registered. Can be used to improve timing
-        min_slack_init      : integer := 20;  -- If no min_slack is configured through the API, this will be take as the default minimum threshold
-        activate_max_slack  : integer := 0    -- When it is set to 1, the module also can be configured through the API o control that the difference of instructions
+        min_slack_init      : integer := 20   -- If no min_slack is configured through the API, this will be take as the default minimum threshold
     );                                        -- between both cores is never bigger than a maximum threshold. Otherwise only the minimum threshold is taken on account.
     port (
         rstn           : in  std_ulogic;
@@ -23,11 +23,11 @@ entity apb_lockstep is
         apbi_pwdata_i  : in  std_logic_vector(31 downto 0);                   
         apbo_prdata_o  : out std_logic_vector(31 downto 0);                  
         -- lockstep signals 
-        icnt1_i        : in  std_logic_vector(1 downto 0);    -- Instruction counter from the first core
-        icnt2_i        : in  std_logic_vector(1 downto 0);    -- Instruction counter from the second core
-        stall1_o       : out std_logic;                       -- Signal to stall the first core
-        stall2_o       : out std_logic;                       -- Signal to stall the second core
-        error_o        : out std_logic                        -- Reset the program if the result of both ALUs does not match
+        icnt1_i        : in  std_logic_vector(lanes_number-1 downto 0);    -- Instruction counter from the first core
+        icnt2_i        : in  std_logic_vector(lanes_number-1 downto 0);    -- Instruction counter from the second core
+        stall1_o       : out std_logic;                                    -- Signal to stall the first core
+        stall2_o       : out std_logic;                                    -- Signal to stall the second core
+        error_o        : out std_logic                                     -- Reset the program if the result of both ALUs does not match
     );
 end;
 
@@ -64,10 +64,10 @@ begin
     global_enable <= r(0)(30);
     enable_core1  <= r(1)(0); -- Set to 1 when the core1 enters in the critical section
     enable_core2  <= r(2)(0); -- Set to 1 when the core1 enters in the critical section
-    -- If no max_slack is especified through the API, the signal max_slack will get the value 0 
-    -- and there won't be a upper threshold, just a lower one (minimum threshold).
+    -- If no max_slack is especified through the API, the signal max_slack will get the maximum value
+    -- to prevent an overflow
     max_slack <= r(0)(29 downto 15) when unsigned(r(0)(29 downto 15)) /= 0 else
-                 std_logic_vector(to_unsigned(0, 15));
+                 (others => '1'); 
     -- If no min_slack is specified throuhg the API, the signal min_slack will take the value of
     -- the generic min_slack_init 
     min_slack <= r(0)(14 downto 0) when unsigned(r(0)(14 downto 0)) /= 0 else
@@ -80,54 +80,27 @@ begin
     --------------------------------------------------------------------------------------------------------------------------------------------------------
     -- This component is encharged of handling the instruction difference between both cores or slack. When the slack is out of the allowed limits
     -- it sets to 1 the stall signal of the core that has to be stalled.
-
-    -- Depending on the generic activate_max_slack, two different modules will be instanciated. This modules are almost the same. The only difference
-    -- between both is that the first one can be configured with an upper threshold that will be used to stall the heading core when the difference of 
-    -- instruction is bigger than this thershold.
-    MAX_SLACK_MODULE: if activate_max_slack = 1 generate
-        slack_handler_inst : slack_handler_max 
-        generic map(
-            en_cycles_limit  => 100,
-            REGISTERS_NUMBER => REGISTERS_NUMBER 
-            )
-        port map(
-            clk            => clk,
-            rstn           => rstn_int,
-            enable_core1_i => enable_core1,
-            enable_core2_i => enable_core2,
-            icnt1_i        => icnt1_i,
-            icnt2_i        => icnt2_i,
-            min_slack_i    => min_slack,
-            max_slack_i    => max_slack, 
-            regs_in        => r(REGISTERS_NUMBER-1 downto 3),
-            regs_out       => regs_handler_o,
-            stall1_o       => stall1, 
-            stall2_o       => stall2,
-            error_o        => error_from_sh
-            );
-    end generate MAX_SLACK_MODULE;
-
-    SLACK_MODULE: if activate_max_slack = 0 generate
-        slack_handler_inst : slack_handler 
-        generic map(
-            en_cycles_limit  => 100,
-            REGISTERS_NUMBER => REGISTERS_NUMBER 
-            )
-        port map(
-            clk            => clk,
-            rstn           => rstn_int,
-            enable_core1_i => enable_core1,
-            enable_core2_i => enable_core2,
-            icnt1_i        => icnt1_i,
-            icnt2_i        => icnt2_i,
-            min_slack_i    => min_slack,
-            regs_in        => r(REGISTERS_NUMBER-1 downto 3),
-            regs_out       => regs_handler_o,
-            stall1_o       => stall1, 
-            stall2_o       => stall2,
-            error_o        => error_from_sh
-            );
-    end generate SLACK_MODULE;
+    slack_handler_inst : slack_handler 
+    generic map(
+        lanes_number     => lanes_number,
+        en_cycles_limit  => 100,
+        REGISTERS_NUMBER => REGISTERS_NUMBER 
+        )
+    port map(
+        clk            => clk,
+        rstn           => rstn_int,
+        enable_core1_i => enable_core1,
+        enable_core2_i => enable_core2,
+        icnt1_i        => icnt1_i,
+        icnt2_i        => icnt2_i,
+        min_slack_i    => min_slack,
+        max_slack_i    => max_slack, 
+        regs_in        => r(REGISTERS_NUMBER-1 downto 3),
+        regs_out       => regs_handler_o,
+        stall1_o       => stall1, 
+        stall2_o       => stall2,
+        error_o        => error_from_sh
+        );
 
     
     -- Depending on the generic register_output, the output will be registered or not.
