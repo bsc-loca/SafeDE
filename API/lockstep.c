@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <lockstep.h>
 //#define __LOCKSTEP_DEBUG__
-#define __RISCV__ 0
+#define __RISCV__ 1
 
 
 // Write lockstep register
@@ -108,7 +108,7 @@ void set_min_threshold(int min_slack) {
 //will be used. If the target core is not RISCV, __RISCV__ must be set to 0. In that case
 //cores won't be perfectly synchronized.
 void start_criticalSec(int core) {
-    int address;
+    unsigned long int address;
     if (core != 1 && core !=2) {
         printf("\nERROR: The last argument of the function must be 1 or 2.\n");
     } else {

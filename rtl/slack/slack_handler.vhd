@@ -8,6 +8,7 @@ use bsc.lockstep_pkg.all;
 
 entity slack_handler is
     generic(
+        register_output  : integer := 0;
         lanes_number     : integer := 2;
         en_cycles_limit  : integer := 100;  -- Max time allow from the activation of one to the activation of the other
         REGISTERS_NUMBER : integer := 10    -- Number of registers
@@ -349,8 +350,8 @@ begin
     -- ASSERTS ---------------------------------------------------------------------------------------------------------------------------------------------
     --------------------------------------------------------------------------------------------------------------------------------------------------------
     -- It checks that staggering is kept always between both thresholds
-    assert (instruction_difference > unsigned(max_slack_i) + lanes_number - 1) report "Maximum threshold condition has been violated" severity error;
-    assert (instruction_difference < unsigned(min_slack_i) - lanes_number + 1) report "Minimum threshold condition has been violated" severity error;
+    assert (instruction_difference <= unsigned(max_slack_i) + lanes_number + lanes_number*register_output - 1) or r_activate_minimum_inst_comp = '0'  report "Maximum threshold condition has been violated" severity error;
+    assert (instruction_difference >= unsigned(min_slack_i) - lanes_number - lanes_number*register_output + 1) or r_activate_minimum_inst_comp = '0' report "Minimum threshold condition has been violated" severity error;
     --------------------------------------------------------------------------------------------------------------------------------------------------------
 end;
 

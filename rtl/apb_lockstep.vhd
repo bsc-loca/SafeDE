@@ -82,6 +82,7 @@ begin
     -- it sets to 1 the stall signal of the core that has to be stalled.
     slack_handler_inst : slack_handler 
     generic map(
+        register_output  => register_output,
         lanes_number     => lanes_number,
         en_cycles_limit  => 100,
         REGISTERS_NUMBER => REGISTERS_NUMBER 

@@ -38,6 +38,7 @@ package lockstep_pkg is
 
     component slack_handler is
         generic (
+            register_output  : integer := 0;
             lanes_number     : integer := 2;    
             en_cycles_limit  : integer := 500;
             REGISTERS_NUMBER : integer := 14       -- Number of registers
