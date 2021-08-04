@@ -4,13 +4,13 @@ use ieee.numeric_std.all;
 use ieee.math_real.all;
 
 library bsc;
-use bsc.lockstep_pkg.all;
+use bsc.lightlock_pkg.all;
 
-entity slack_handler is
+entity staggering_handler is
     generic(
         register_output  : integer := 0;
         lanes_number     : integer := 2;
-        en_cycles_limit  : integer := 100;  -- Max time allow from the activation of one to the activation of the other
+        en_cycles_limit  : integer := 500;  -- Max time allow from the activation of one to the activation of the other
         REGISTERS_NUMBER : integer := 10    -- Number of registers
         );  
     port(
@@ -20,8 +20,8 @@ entity slack_handler is
         enable_core2_i : in  std_logic;
         icnt1_i        : in  std_logic_vector(lanes_number-1 downto 0);     -- Instruction counter from the first core
         icnt2_i        : in  std_logic_vector(lanes_number-1 downto 0);     -- Instruction counter from the second core
-        max_slack_i    : in  std_logic_vector(14 downto 0);
-        min_slack_i    : in  std_logic_vector(14 downto 0);
+        max_staggering_i    : in  std_logic_vector(14 downto 0);
+        min_staggering_i    : in  std_logic_vector(14 downto 0);
         regs_in        : in  registers_vector(REGISTERS_NUMBER-1 downto 3); -- Registers of the module (in)
         regs_out       : out registers_vector(REGISTERS_NUMBER-1 downto 3); -- Registers of the module (out) 
         stall1_o       : out std_logic;                                     -- Signal to stall the first core
@@ -30,7 +30,7 @@ entity slack_handler is
         );  
 end;
 
-architecture rtl of slack_handler is
+architecture rtl of staggering_handler is
 
     --------------------------------------------------------------------------------------------------------------------------------------------------------
     -- SIGNALS ---------------------------------------------------------------------------------------------------------------------------------------------
@@ -245,7 +245,7 @@ begin
     
     
     -- FSM to stall the cores when upper threshold or lower threshold is exceeded
-    process(core1_ahead_core2, stall_fsm, instruction_difference, enable, enable_core1_i, enable_core2_i, max_slack_i, min_slack_i)
+    process(core1_ahead_core2, stall_fsm, instruction_difference, enable, enable_core1_i, enable_core2_i, max_staggering_i, min_staggering_i)
     begin
         n_stall_fsm <= stall_fsm;
         stall1 <= '0';
@@ -253,7 +253,7 @@ begin
         case stall_fsm is
             when not_stalled =>  -- No core is stalled, check if any core has to be stalled
                 if enable = '1' then  
-                    if instruction_difference >= unsigned(max_slack_i) then
+                    if instruction_difference >= unsigned(max_staggering_i) then
                         if core1_ahead_core2 = '1' then
                             n_stall_fsm <= stalled1;
                             stall1 <= '1';
@@ -261,7 +261,7 @@ begin
                             n_stall_fsm <= stalled2;
                             stall2 <= '1';
                         end if;
-                    elsif instruction_difference <= unsigned(min_slack_i) then
+                    elsif instruction_difference <= unsigned(min_staggering_i) then
                         if core1_ahead_core2 = '1' then
                             if enable_core2_i = '1' then  -- It has to be checked that the trailing core is active since the enable signal is active when the trail core is active
                                 n_stall_fsm <= stalled2;  -- Could happen that the enable signal is active but the trailing core has not enter the critical section yet.
@@ -277,21 +277,21 @@ begin
                 end if;
             when stalled1  => -- Core1 is stalled, it asserts the stall signal and check wether it has to be "unstalled" or not
                 stall1 <= '1';
-                --if ((instruction_difference < unsigned(min_slack_i) and core1_ahead_core2 = '1') or (instruction_difference > unsigned(max_slack_i) and core1_ahead_core2 = '0')) and enable = '1'  then
+                --if ((instruction_difference < unsigned(min_staggering_i) and core1_ahead_core2 = '1') or (instruction_difference > unsigned(max_staggering_i) and core1_ahead_core2 = '0')) and enable = '1'  then
                 --    n_stall_fsm <= stalled2;
                 --    stall1 <= '0';
                 --    stall2 <= '1';
-                if (instruction_difference < unsigned(max_slack_i) and core1_ahead_core2 = '1') or (instruction_difference > unsigned(min_slack_i) and core1_ahead_core2 = '0') or enable = '0'  then
+                if (instruction_difference < unsigned(max_staggering_i) and core1_ahead_core2 = '1') or (instruction_difference > unsigned(min_staggering_i) and core1_ahead_core2 = '0') or enable = '0'  then
                     n_stall_fsm <= not_stalled;
                     stall1 <= '0';
                 end if;
             when stalled2  => -- Core2 is stalled, it asserts the stall signal and check wether it has to be "unstalled" or not
                 stall2 <= '1';
-                --if ((instruction_difference < unsigned(min_slack_i) and core1_ahead_core2 = '0') or (instruction_difference > unsigned(max_slack_i) and core1_ahead_core2 = '1')) and enable = '1' then
+                --if ((instruction_difference < unsigned(min_staggering_i) and core1_ahead_core2 = '0') or (instruction_difference > unsigned(max_staggering_i) and core1_ahead_core2 = '1')) and enable = '1' then
                 --    n_stall_fsm <= stalled1;
                 --    stall1 <= '1';
                 --    stall2 <= '0';
-                if (instruction_difference < unsigned(max_slack_i) and core1_ahead_core2 = '0') or (instruction_difference > unsigned(min_slack_i) and core1_ahead_core2 = '1') or enable = '0'  then
+                if (instruction_difference < unsigned(max_staggering_i) and core1_ahead_core2 = '0') or (instruction_difference > unsigned(min_staggering_i) and core1_ahead_core2 = '1') or enable = '0'  then
                     n_stall_fsm <= not_stalled;
                     stall2 <= '0';
                 end if;
@@ -350,8 +350,8 @@ begin
     -- ASSERTS ---------------------------------------------------------------------------------------------------------------------------------------------
     --------------------------------------------------------------------------------------------------------------------------------------------------------
     -- It checks that staggering is kept always between both thresholds
-    assert (instruction_difference <= unsigned(max_slack_i) + lanes_number + lanes_number*register_output - 1) or r_activate_minimum_inst_comp = '0'  report "Maximum threshold condition has been violated" severity error;
-    assert (instruction_difference >= unsigned(min_slack_i) - lanes_number - lanes_number*register_output + 1) or r_activate_minimum_inst_comp = '0' report "Minimum threshold condition has been violated" severity error;
+    assert (instruction_difference <= unsigned(max_staggering_i) + lanes_number + lanes_number*register_output - 1) or r_activate_minimum_inst_comp = '0'  report "Maximum threshold condition has been violated" severity error;
+    assert (instruction_difference >= unsigned(min_staggering_i) - lanes_number - lanes_number*register_output + 1) or r_activate_minimum_inst_comp = '0' report "Minimum threshold condition has been violated" severity error;
     --------------------------------------------------------------------------------------------------------------------------------------------------------
 end;
 

@@ -3,14 +3,15 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 use ieee.math_real.all;
 library bsc;
-use bsc.lockstep_pkg.all;
+use bsc.lightlock_pkg.all;
 
 
 entity apb_lockstep is
     generic (
         lanes_number        : integer := 2;   -- Number of lanes of each core (1 icnt bit per lane)
         register_output     : integer := 0;   -- If is 1, the output is registered. Can be used to improve timing
-        min_slack_init      : integer := 20   -- If no min_slack is configured through the API, this will be take as the default minimum threshold
+        en_cycles_limit     : integer := 500; -- If one core activates lockstep and the other core doesn't activate the lockstep before 500 cycles it rise an interrupt
+        min_staggering_init : integer := 20   -- If no min_staggering is configured through the API, this will be take as the default minimum threshold
     );                                        -- between both cores is never bigger than a maximum threshold. Otherwise only the minimum threshold is taken on account.
     port (
         rstn           : in  std_ulogic;
@@ -41,7 +42,7 @@ architecture rtl of apb_lockstep is
     signal regs_handler_o : registers_vector(REGISTERS_NUMBER-1 downto 3) ;
 
     -- configuration signals
-    signal max_slack, min_slack : std_logic_vector(14 downto 0);
+    signal max_staggering, min_staggering : std_logic_vector(14 downto 0);
     signal enable_core1, enable_core2 : std_logic;
 
     -- error signals
@@ -64,43 +65,43 @@ begin
     global_enable <= r(0)(30);
     enable_core1  <= r(1)(0); -- Set to 1 when the core1 enters in the critical section
     enable_core2  <= r(2)(0); -- Set to 1 when the core1 enters in the critical section
-    -- If no max_slack is especified through the API, the signal max_slack will get the maximum value
+    -- If no max_staggering is especified through the API, the signal max_staggering will get the maximum value
     -- to prevent an overflow
-    max_slack <= r(0)(29 downto 15) when unsigned(r(0)(29 downto 15)) /= 0 else
-                 (others => '1'); 
-    -- If no min_slack is specified throuhg the API, the signal min_slack will take the value of
-    -- the generic min_slack_init 
-    min_slack <= r(0)(14 downto 0) when unsigned(r(0)(14 downto 0)) /= 0 else
-                 std_logic_vector(to_unsigned(min_slack_init, 15));
+    max_staggering <= r(0)(29 downto 15) when unsigned(r(0)(29 downto 15)) /= 0 else
+                 std_logic_vector(to_unsigned(32750, 15)); -- Set it to 32750 to have a margin with its biggest value 32767 and avoid overflow
+    -- If no min_staggering is specified throuhg the API, the signal min_staggering will take the value of
+    -- the generic min_staggering_init 
+    min_staggering <= r(0)(14 downto 0) when unsigned(r(0)(14 downto 0)) /= 0 else
+                 std_logic_vector(to_unsigned(min_staggering_init, 15));
     rstn_int <= soft_rstn and rstn;
 
 
     --------------------------------------------------------------------------------------------------------------------------------------------------------
     -- COMPONENT INSTANTIATION -----------------------------------------------------------------------------------------------------------------------------
     --------------------------------------------------------------------------------------------------------------------------------------------------------
-    -- This component is encharged of handling the instruction difference between both cores or slack. When the slack is out of the allowed limits
+    -- This component is encharged of handling the instruction difference between both cores or staggering. When the staggering is out of the allowed limits
     -- it sets to 1 the stall signal of the core that has to be stalled.
-    slack_handler_inst : slack_handler 
+    staggering_handler_inst : staggering_handler 
     generic map(
         register_output  => register_output,
         lanes_number     => lanes_number,
-        en_cycles_limit  => 100,
+        en_cycles_limit  => en_cycles_limit,
         REGISTERS_NUMBER => REGISTERS_NUMBER 
         )
     port map(
-        clk            => clk,
-        rstn           => rstn_int,
-        enable_core1_i => enable_core1,
-        enable_core2_i => enable_core2,
-        icnt1_i        => icnt1_i,
-        icnt2_i        => icnt2_i,
-        min_slack_i    => min_slack,
-        max_slack_i    => max_slack, 
-        regs_in        => r(REGISTERS_NUMBER-1 downto 3),
-        regs_out       => regs_handler_o,
-        stall1_o       => stall1, 
-        stall2_o       => stall2,
-        error_o        => error_from_sh
+        clk              => clk,
+        rstn             => rstn_int,
+        enable_core1_i   => enable_core1,
+        enable_core2_i   => enable_core2,
+        icnt1_i          => icnt1_i,
+        icnt2_i          => icnt2_i,
+        min_staggering_i => min_staggering,
+        max_staggering_i => max_staggering, 
+        regs_in          => r(REGISTERS_NUMBER-1 downto 3),
+        regs_out         => regs_handler_o,
+        stall1_o         => stall1, 
+        stall2_o         => stall2,
+        error_o          => error_from_sh
         );
 
     
@@ -164,16 +165,16 @@ begin
             -- Register containing minimum instructions difference should be preset to a high value
             rin(12) <= (others => '1');
         elsif v(0)(31) = '1' then
-        -- if softreset bit is set, data from slack handler and reset bit are set to 0
+        -- if softreset bit is set, data from staggering handler and reset bit are set to 0
             rin <= (others => (others => '0'));
             -- Register containing minimum instructions difference should be reset to a high value
             rin(12) <= (others => '1');
             rin(0) <= v(0);
             rin(0)(31) <= '0';
         else
-            -- change registers with data from slack handler
+            -- change registers with data from staggering handler
             rin(REGISTERS_NUMBER-1 downto 3)  <= regs_handler_o;
-            -- configuration register shouldn't be changed by the slack handler
+            -- configuration register shouldn't be changed by the staggering handler
             rin(0) <= v(0);
             rin(1) <= v(1);
             rin(2) <= v(2);

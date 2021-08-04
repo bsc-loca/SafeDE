@@ -1,0 +1,42 @@
+\section{Signal descriptions}
+
+Table \ref{t_ports} shows the interface of the core (VHDL ports).
+\begin{table}[H]
+	\caption{Signal descriptions (VHDL ports)}
+	\label{t_ports}
+	\centering
+	\begin{footnotesize}
+	\begin{tabular}{|l|l|l|p{6cm}|l|}
+		\hline
+		\textbf{Signal name} & \textbf{Field}  & \textbf{Type}  & \textbf{Function} & \textbf{Active}\\
+		\hline
+		RSTN & &Input &Reset & Low\\
+		\hline
+		CLK & &Input &AHB master bus clock & -\\
+		\hline
+		ICNT1\_I & &Input & Input to count the instructions executed by core1 & High\\
+		\hline
+		ICNT2\_I & &Input & Input to count the instructions executed by core2 & High\\
+		\hline
+		STALL1\_O & &Output & Output to stall the pipeline of core1 & High\\
+		\hline
+		STALL2\_O & &Output & Output to stall the pipeline of core2 & High\\
+		\hline
+		APBI\_I & * &Input &APB slave output signals, includes interrupts & - \\
+		\hline
+		APBO\_O & * &Output &APB slave output signals, includes interrupts & - \\
+		\hline
+	\end{tabular}
+\end{footnotesize}
+\end{table}
+
+Signals ICNT1\_I and ICNT2\_I come from the pipelines of the cores. These signals have two bits each, one bit per lane. When one instruction is committed in one of the lanes, the corresponding bit will be set to 1 during one cycle.
+
+Signals STALL1\_O and STALL2\_O come from SafeDE to the caches controllers and pipelines of the cores. These signals hold the pipelines of the cores when they are set to 1.
+
+SafeDE is designed to work with two cores. The pair of signals ICNT\_1 and STALL\_1 have to be wired to the pipeline of the same core. This core will be considered the core1 and will have to write the register \ref{critical1} explained in the section \ref{operation_chap}. The same reasoning is applicable to core2.
+
+
+\hspace{2cm}
+
+

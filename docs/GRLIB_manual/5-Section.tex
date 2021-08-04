@@ -1,0 +1,32 @@
+\section{Library dependences}
+Table \ref{dep_tab} shows the VHDL libraries used when instantiating SafeDE.\\
+%%TODO: check if the libraries are actually needed
+\begin{table}[H]
+	\caption{Library dependencies}
+	\label{dep_tab}
+	\centering
+		\begin{small}
+	\begin{tabular}{|l|l|l|l|}
+		\hline
+		\textbf{Library} & \textbf{Package}  & \textbf{Imported units}  & \textbf{Description} \\
+		\hline
+		IEEE & std\_logic\_1164 & Types & Standard logic types\\
+		\hline
+		IEEE & numeric\_std & Functions and types & Arithmetic functions and signed and unsigned types\\
+		\hline
+		IEEE & math\_real & Constants and functions & Mathematical functions and constants\\
+		\hline
+		GRLIB & amba & Signals & AMBA signal definitions\\
+		\hline
+		GRLIB & devices  & Types  & Device names and vendors \\
+		\hline
+		BSC & ligthlock\_pkg & Instances and signals & Instances and type definitions for SafeDE\\
+		\hline
+		BSC & lightlock\_module & Instance & Instance of SafeDE top module\\
+		\hline
+	\end{tabular}
+\end{small}
+\end{table}
+
+
+\hspace{2cm}

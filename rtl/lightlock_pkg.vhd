@@ -3,7 +3,7 @@ use ieee.std_logic_1164.all;
 use ieee.math_real.all;
 
 
-package lockstep_pkg is
+package lightlock_pkg is
 
     -- Types definitions
 
@@ -15,7 +15,8 @@ package lockstep_pkg is
         generic (
             lanes_number        : integer := 2;
             register_output     : integer := 0;   -- If is 1, the output is registered. Can be used to improve timing
-            min_slack_init      : integer := 20   -- If no min_slack is configured through the API, this will be take as the default minimum threshold
+            en_cycles_limit     : integer := 500;
+            min_staggering_init : integer := 20   -- If no min_staggering is configured through the API, this will be take as the default minimum threshold
         );                                        -- between both cores is never bigger than a maximum threshold. Otherwise only the minimum threshold is taken on account.
         port (
             rstn           : in  std_ulogic;
@@ -36,7 +37,7 @@ package lockstep_pkg is
         );
     end component apb_lockstep;
 
-    component slack_handler is
+    component staggering_handler is
         generic (
             register_output  : integer := 0;
             lanes_number     : integer := 2;    
@@ -50,17 +51,17 @@ package lockstep_pkg is
             enable_core2_i : in  std_logic;
             icnt1_i        : in  std_logic_vector(1 downto 0);                  -- Instruction counter from the first core
             icnt2_i        : in  std_logic_vector(1 downto 0);                  -- Instruction counter from the second core
-            max_slack_i    : in  std_logic_vector(14 downto 0);
-            min_slack_i    : in  std_logic_vector(14 downto 0);
+            max_staggering_i    : in  std_logic_vector(14 downto 0);
+            min_staggering_i    : in  std_logic_vector(14 downto 0);
             regs_in        : in  registers_vector(REGISTERS_NUMBER-1 downto 3); -- Registers of the module (in)
             regs_out       : out registers_vector(REGISTERS_NUMBER-1 downto 3); -- Registers of the module (out) 
             stall1_o       : out std_logic;                                     -- Signal to stall the first core
             stall2_o       : out std_logic;                                     -- Signal to stall the second core
             error_o        : out std_logic                                      -- Signal to assert an error
         );
-    end component slack_handler;
+    end component staggering_handler;
 
-end lockstep_pkg;
+end lightlock_pkg;
 
 
 
