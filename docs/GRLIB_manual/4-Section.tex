@@ -4,7 +4,7 @@
 \subsection{General}
 SafeDE is controlled through three internal registers:
 
-The output signals used to stall the cores \ref{t_ports} are anded with the bit 30 of the register \ref{cfg0}. If this bit is set to 0, SafeDE will be able to stop neither of the cores. If bit 31 "soft\_reset" is set to 1, all SafeDE registers are set to its reset value except the configuration register \ref{cfg0}. In the same register, there are 15 bits to configure the maximum and the minimum staggering allowed. When the staggering is smaller or bigger than these thresholds, the trail or the head core will be stalled until the staggering is within limits again. If the value of "max\_staggering" is kept to 0, the value of the maximum staggering will be 32750 to avoid overflows. If "min\_staggering" is kept to 0, the value of the maximum staggering will be the value of the VHDL generics min\_staggering\_init explained in table \ref{generics}.
+The output signals used to stall the cores \ref{t_ports} are anded with the bit 30 of the configuration register \ref{cfg0}. If this bit is set to 0, SafeDE will be able to stop neither of the cores. If bit 31 "soft\_reset" is set to 1, all SafeDE registers are set to its reset value except the configuration register. In the same register, there are 15 bits to configure the maximum and the minimum staggering allowed. When the staggering is smaller or bigger than these thresholds, the trail or the head core will be stalled until the staggering is within limits again. If the value of "max\_staggering" is kept to 0, the value of the maximum staggering will be 32750 to avoid overflows. If "min\_staggering" is kept to 0, the value of the maximum staggering will be the value of the VHDL generics min\_staggering\_init explained in table \ref{generics}.
 
 \begin{register}{H}{SafeDE configuration register 0}{0x00}
 	\label{cfg0}
@@ -33,7 +33,8 @@ Apart from the  configuration register, SafeDE has two other registers \ref{crit
 	\reglabel{Reset value}\regnewline
 \end{register}
 
-\hspace{1cm}
+It doesn't matter which core enters first the critical section (core1 or core2). The first core entering the critical section will take the role of head core and vice-versa. A mechanism also raises an interrupt if one core enters its critical section and the other doesn't. VHDL generic EN\_CYCLES\_LIMIT described in table \ref{generics} determine how many cycles can elapse between one core and the other enter their critical section.
+
 
 
 
@@ -71,7 +72,7 @@ In addition to the configuration registers, SafeDE also has some registers that 
 
 The maximum staggering register (0x28) stores the maximum staggering achieved during the execution. The minimum staggering register (0x30) stores the minimum staggering achieved during the execution. However, this register is only updated once both cores have entered the critical section and the staggering is equal to or bigger than the minimum threshold. Each cycle is added to the value of the Accumulated staggering register (0x2C) the value of the staggering. The average staggering can be derived by dividing the value of this register by the number of cycles active.
 
-All statistic registers except the minimum staggering register are updated when one core has entered its critical section and until the head core has finished its critical section. To reset these registers, the soft\_reset bit in the configuration register \ref{cfg0} has to be set to 1. None of these registers have any mechanism to prevent overflow.
+All statistic registers except the minimum staggering register are updated once one core has entered its critical section (head core) and until the head core has finished its critical section. To reset these registers, the soft\_reset bit in the configuration register \ref{cfg0} has to be set to 1. None of these registers have any mechanism to prevent overflow.
 
 \hspace{1cm}
 

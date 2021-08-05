@@ -34,7 +34,7 @@ Signals ICNT1\_I and ICNT2\_I come from the pipelines of the cores. These signal
 
 Signals STALL1\_O and STALL2\_O come from SafeDE to the caches controllers and pipelines of the cores. These signals hold the pipelines of the cores when they are set to 1.
 
-SafeDE is designed to work with two cores. The pair of signals ICNT\_1 and STALL\_1 have to be wired to the pipeline of the same core. This core will be considered the core1 and will have to write the register \ref{critical1} explained in the section \ref{operation_chap}. The same reasoning is applicable to core2.
+SafeDE is designed to work with two cores. The pair of signals ICNT\_1 and STALL\_1 have to be wired to the pipeline of the same core. This core will be considered the core1 and will have to write the critical section 1 register \ref{critical1} explained in the section \ref{operation_chap}. The same reasoning is applicable to core2.
 
 
 \hspace{2cm}
