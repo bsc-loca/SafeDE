@@ -11,10 +11,11 @@ package lightlock_pkg is
 
 
     -- Components definitions 
-    component apb_lockstep is
+    component apb_lightlock is
         generic (
             lanes_number        : integer := 2;
             register_output     : integer := 0;   -- If is 1, the output is registered. Can be used to improve timing
+            register_input      : integer := 2;   -- The inputs (icnts) are registered with as many registers as the value of register_input
             en_cycles_limit     : integer := 500;
             min_staggering_init : integer := 20   -- If no min_staggering is configured through the API, this will be take as the default minimum threshold
         );                                        -- between both cores is never bigger than a maximum threshold. Otherwise only the minimum threshold is taken on account.
@@ -35,10 +36,11 @@ package lightlock_pkg is
             stall2_o       : out std_logic;                       -- Signal to stall the second core
             error_o        : out std_logic                        -- Reset the program if the result of both ALUs does not match
         );
-    end component apb_lockstep;
+    end component apb_lightlock;
 
     component staggering_handler is
         generic (
+            register_input   : integer := 0;
             register_output  : integer := 0;
             lanes_number     : integer := 2;    
             en_cycles_limit  : integer := 500;

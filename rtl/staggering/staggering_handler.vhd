@@ -9,6 +9,7 @@ use bsc.lightlock_pkg.all;
 entity staggering_handler is
     generic(
         register_output  : integer := 0;
+        register_input   : integer := 0;
         lanes_number     : integer := 2;
         en_cycles_limit  : integer := 500;  -- Max time allow from the activation of one to the activation of the other
         REGISTERS_NUMBER : integer := 10    -- Number of registers
@@ -350,9 +351,10 @@ begin
     -- ASSERTS ---------------------------------------------------------------------------------------------------------------------------------------------
     --------------------------------------------------------------------------------------------------------------------------------------------------------
     -- It checks that staggering is kept always between both thresholds
-    assert (instruction_difference <= unsigned(max_staggering_i) + lanes_number + lanes_number*register_output - 1) or r_activate_minimum_inst_comp = '0'  report "Maximum threshold condition has been violated" severity error;
-    assert (instruction_difference >= unsigned(min_staggering_i) - lanes_number - lanes_number*register_output + 1) or r_activate_minimum_inst_comp = '0' report "Minimum threshold condition has been violated" severity error;
+    --assert (instruction_difference <= unsigned(max_staggering_i) + lanes_number + lanes_number*register_output + lanes_number*register_input - 1) or r_activate_minimum_inst_comp = '0'  report "Maximum threshold condition has been violated" severity error;
+    --assert (instruction_difference >= unsigned(min_staggering_i) - lanes_number - lanes_number*register_output - lanes_number*register_input + 1) or r_activate_minimum_inst_comp = '0' report "Minimum threshold condition has been violated" severity error;
     --------------------------------------------------------------------------------------------------------------------------------------------------------
+    assert (r_max_inst_diff <= unsigned(max_staggering_i) + lanes_number + lanes_number*register_output + lanes_number*register_input - 1) report "Maximum threshold condition has been violated: " & integer'image(to_integer(r_max_inst_diff)) & " > " & integer'image(to_integer(unsigned(max_staggering_i)) + lanes_number + lanes_number*register_output + lanes_number*register_input - 1)   severity error;
+    assert (r_min_inst_diff >= unsigned(min_staggering_i) - lanes_number - lanes_number*register_output - lanes_number*register_input + 1) or r_activate_minimum_inst_comp = '0' report "Minimum threshold condition has been violated: " & integer'image(to_integer(r_min_inst_diff)) & " < " & integer'image(to_integer(unsigned(min_staggering_i)) - lanes_number - lanes_number*register_output - lanes_number*register_input + 1) severity error;
 end;
-
 

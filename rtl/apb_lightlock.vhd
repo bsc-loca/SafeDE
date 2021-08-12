@@ -6,10 +6,11 @@ library bsc;
 use bsc.lightlock_pkg.all;
 
 
-entity apb_lockstep is
+entity apb_lightlock is
     generic (
         lanes_number        : integer := 2;   -- Number of lanes of each core (1 icnt bit per lane)
-        register_output     : integer := 0;   -- If is 1, the output is registered. Can be used to improve timing
+        register_output     : integer := 3;   -- The outputs (stalls) are registered with as many registers as the value of register_output
+        register_input      : integer := 3;   -- The inputs (icnts) are registered with as many registers as the value of register_input
         en_cycles_limit     : integer := 500; -- If one core activates lockstep and the other core doesn't activate the lockstep before 500 cycles it rise an interrupt
         min_staggering_init : integer := 20   -- If no min_staggering is configured through the API, this will be take as the default minimum threshold
     );                                        -- between both cores is never bigger than a maximum threshold. Otherwise only the minimum threshold is taken on account.
@@ -32,7 +33,7 @@ entity apb_lockstep is
     );
 end;
 
-architecture rtl of apb_lockstep is
+architecture rtl of apb_lightlock is
 
     constant REGISTERS_NUMBER : integer := 13; -- minimum 2
     constant SLV_INDEX_CEIL   : integer := integer(ceil(log2(real(REGISTERS_NUMBER))));
@@ -53,7 +54,14 @@ architecture rtl of apb_lockstep is
     
     -- Global enable
     signal global_enable : std_logic;
-    signal r_stall1, r_stall2, stall1 , stall2 : std_logic;
+
+    -- OUTPUTS
+    signal stall1 , stall2 : std_logic;
+    signal r_stall1, r_stall2, n_stall1, n_stall2 : std_logic_vector(register_output-1 downto 0);
+
+    -- INPUTS
+    signal r_icnt1, r_icnt2, n_icnt1, n_icnt2 : std_logic_vector((register_input)*lanes_number-1 downto 0);
+    signal icnt1, icnt2 : std_logic_vector(1 downto 0);
 
 
 begin
@@ -83,6 +91,7 @@ begin
     -- it sets to 1 the stall signal of the core that has to be stalled.
     staggering_handler_inst : staggering_handler 
     generic map(
+        register_input   => register_input,
         register_output  => register_output,
         lanes_number     => lanes_number,
         en_cycles_limit  => en_cycles_limit,
@@ -93,8 +102,8 @@ begin
         rstn             => rstn_int,
         enable_core1_i   => enable_core1,
         enable_core2_i   => enable_core2,
-        icnt1_i          => icnt1_i,
-        icnt2_i          => icnt2_i,
+        icnt1_i          => icnt1,
+        icnt2_i          => icnt2,
         min_staggering_i => min_staggering,
         max_staggering_i => max_staggering, 
         regs_in          => r(REGISTERS_NUMBER-1 downto 3),
@@ -105,31 +114,101 @@ begin
         );
 
     
-    -- Depending on the generic register_output, the output will be registered or not.
+    -- Depending on the generics register_output and register_input, the outputs and the
+    -- inputs will be registered or not.
     -- This is useful to break the combiantional path and prevent timing problems.
+
+    --If the outputs are not registered
     NO_REGISTERED_OUTPUT: if register_output = 0 generate
-        r_stall1 <= stall1;
-        r_stall2 <= stall2;
-        stall1_o <= r_stall1 and global_enable;
-        stall2_o <= r_stall2 and global_enable;
+        stall1_o <= stall1 and global_enable;
+        stall2_o <= stall2 and global_enable;
     end generate NO_REGISTERED_OUTPUT;
 
-    REGISTERED_OUTPUT: if register_output = 1 generate
+    --If the inputs are not registered
+    NO_REGISTERED_INPUT: if register_input = 0 generate
+        icnt1 <= icnt1_i;
+        icnt2 <= icnt2_i;
+    end generate NO_REGISTERED_INPUT;
+
+    -- If there is only 1 register at the outputs
+    REGISTERED_OUTPUT_1: if register_output = 1 generate
+        n_stall1(0) <= stall1;
+        n_stall2(0) <= stall2;
         process(clk)
         begin
             if rising_edge(clk) then
                 if rstn = '0' then
-                    r_stall1  <= '0';                     
-                    r_stall2  <= '0';                     
+                    r_stall1(0)  <= '0';                     
+                    r_stall2(0)  <= '0';                     
        	        else
-                    r_stall1  <= stall1;        -- Register used to detect the flank 
-                    r_stall2  <= stall2;        -- Register used to detect the flank 
+                    r_stall1 <= n_stall1;  
+                    r_stall2 <= n_stall2;  
                 end if;
             end if;   
         end process;
-        stall1_o <= r_stall1 and global_enable;
-        stall2_o <= r_stall2 and global_enable;
-    end generate REGISTERED_OUTPUT;
+        stall1_o <= r_stall1(0) and global_enable;
+        stall2_o <= r_stall2(0) and global_enable;
+    end generate REGISTERED_OUTPUT_1;
+
+    -- If there is only 1 register at the inputs
+    REGISTERED_INPUT_1: if register_output = 1 generate
+        n_icnt1 <= icnt1_i;
+        n_icnt2 <= icnt2_i;
+        process(clk)
+        begin
+            if rising_edge(clk) then
+                if rstn = '0' then
+                    r_icnt1 <= "00";                     
+                    r_icnt2 <= "00";                     
+       	        else
+                    r_icnt1 <= n_icnt1;  
+                    r_icnt2 <= n_icnt2;  
+                end if;
+            end if;   
+        end process;
+        icnt1 <= r_icnt1;
+        icnt2 <= r_icnt2;
+    end generate REGISTERED_INPUT_1;
+
+    -- If there are more than 1 register at the outputs
+    REGISTERED_OUTPUT_MULTIPLE: if register_output > 1 generate
+        n_stall1 <= r_stall1(register_output-2 downto 0) & stall1;
+        n_stall2 <= r_stall2(register_output-2 downto 0) & stall2;
+        process(clk)
+        begin
+            if rising_edge(clk) then
+                if rstn = '0' then
+                    r_stall1  <= (others => '0');                     
+                    r_stall2  <= (others => '0');                     
+       	        else
+                    r_stall1 <= n_stall1;  
+                    r_stall2 <= n_stall2;  
+                end if;
+            end if;   
+        end process;
+        stall1_o <= r_stall1(register_output-1) and global_enable;
+        stall2_o <= r_stall2(register_output-1) and global_enable;
+    end generate REGISTERED_OUTPUT_MULTIPLE;
+
+    -- If there are more than 1 register at the inputs
+    REGISTERED_INPUT_MULTIPLE: if register_output > 1 generate
+        n_icnt1 <= r_icnt1((register_input-1)*lanes_number-1 downto 0) & icnt1_i;
+        n_icnt2 <= r_icnt2((register_input-1)*lanes_number-1 downto 0) & icnt2_i;
+        process(clk)
+        begin
+            if rising_edge(clk) then
+                if rstn = '0' then
+                    r_icnt1  <= (others => '0');                     
+                    r_icnt2  <= (others => '0');                     
+       	        else
+                    r_icnt1 <= n_icnt1;  
+                    r_icnt2 <= n_icnt2;  
+                end if;
+            end if;   
+        end process;
+        icnt1 <= r_icnt1(register_input*lanes_number-1 downto (register_input-1)*lanes_number);
+        icnt2 <= r_icnt2(register_input*lanes_number-1 downto (register_input-1)*lanes_number);
+    end generate REGISTERED_INPUT_MULTIPLE;
 
         
     --------------------------------------------------------------------------------------------------------------------------------------------------------
