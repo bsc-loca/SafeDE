@@ -21,7 +21,9 @@ Table \ref{generics} shows the configuration parameters (VDHL generics) exposed 
 			\hline
 			LANES\_NUMBER & Lanes of the processor & 1 to 5 & 2\\
 			\hline
-			REGISTER\_OUTPUT & If set to 1, the STALL outpus are registered to improve timing & 0 or 1 & 0 \\
+                        REGISTER\_OUTPUT & Number of registers at the stall ouput signals (if 0 no registers) & - & 0 \\
+			\hline
+			REGISTER\_INPUT & Number of registers at the icnt input signals (if 0 no registers) & - & 0 \\
 			\hline
 			MIN\_STAGGERING\_INIT & If the minimum staggering threshold is not changed through the software, its value will be this parameter& 5 to 32740 & 20 \\
 			\hline

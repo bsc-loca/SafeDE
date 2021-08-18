@@ -34,6 +34,7 @@ apb_lockstep_inst : apb_wrapper_lockstep
       pirq      => pirq_safede,
       lanes_number        => 2,
       register_output     => 0,
+      register_input      => 0,
       en_cycles_limit     => 500,
       min_staggering_init => 20
       )

@@ -1,5 +1,0 @@
-\section{Special cases, corner cases}
-
-After reset of a top module (PMU\_raw for instance) you may experience that all the outputs route the event in the first position of vector\_i. This is intended behavior and happens due to the reset of the configuration registers (cfg\_i).\\
-\\
-In the default integration with PMU\_raw.sv there is a self-test capability that bypasses the crossbar with certain test patterns. This \textbf{self-test capability} is configured in the main configuration register of PMU\_raw.sv. Be sure to have this function disabled if you plan to use the crossbar.
