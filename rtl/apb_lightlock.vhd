@@ -2,8 +2,8 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 use ieee.math_real.all;
-library bsc;
-use bsc.lightlock_pkg.all;
+library safety;
+use safety.lightlock_pkg.all;
 
 
 entity apb_lightlock is
