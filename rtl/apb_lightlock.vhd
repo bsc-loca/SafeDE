@@ -151,7 +151,7 @@ begin
     end generate REGISTERED_OUTPUT_1;
 
     -- If there is only 1 register at the inputs
-    REGISTERED_INPUT_1: if register_output = 1 generate
+    REGISTERED_INPUT_1: if register_input = 1 generate
         n_icnt1 <= icnt1_i;
         n_icnt2 <= icnt2_i;
         process(clk)
@@ -191,7 +191,7 @@ begin
     end generate REGISTERED_OUTPUT_MULTIPLE;
 
     -- If there are more than 1 register at the inputs
-    REGISTERED_INPUT_MULTIPLE: if register_output > 1 generate
+    REGISTERED_INPUT_MULTIPLE: if register_input > 1 generate
         n_icnt1 <= r_icnt1((register_input-1)*lanes_number-1 downto 0) & icnt1_i;
         n_icnt2 <= r_icnt2((register_input-1)*lanes_number-1 downto 0) & icnt2_i;
         process(clk)
