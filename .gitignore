@@ -1,0 +1,14 @@
+#Ignored files
+
+##### These exclude several files "*", be carful not to exclude a file you actually don't want #####################################################
+*~
+*swp
+*swo
+*.jou
+*.log
+####################################################################################################################################################
+synthesis/output
+slack/slack_old
+
+
+

@@ -1,0 +1,55 @@
+\section{Instantiation}
+An example design is provided in the context of De-RISC.
+\\
+\belowcaptionskip=-10pt
+\begin{lstlisting}[label=ins-prot,caption=SafePMU instance example for gpp\_sys,style=vhdl]
+-- Include BSC library
+library bsc;
+use bsc.lightlock_module.all;
+
+--Provide non-overlaping APB parameters
+constant psidx_safede : integer := 5;
+constant paddr_safede : integer := 6;
+-- Chose minimum length: 256 bytes;
+constant pmask_safede : integer := 16#fff#;  
+constant pirq_safede : integer := 14;
+
+--Declare signals with as many bits as lanes are.
+--Each bit of each lane has to be set to '1' during one 
+--cycle when one instruction is commited in that lane
+singal icnt1 : std_logic_vector(1 downto 0);
+singal icnt2 : std_logic_vector(1 downto 0);
+
+--Declare signals that are able to stall the pipelines
+signal lockstep_stall1 : std_logic;  -- For core1
+signal lockstep_stall2 : std_logic;  -- For core2
+
+
+--Instance of the unit
+apb_lockstep_inst : apb_wrapper_lockstep
+  generic map(
+      pindex    => psidx_safede,
+      paddr     => paddr_safede,            
+      pmask     => pmask_safede,
+      pirq      => pirq_safede,
+      lanes_number        => 2,
+      register_output     => 0,
+      register_input      => 0,
+      en_cycles_limit     => 500,
+      min_staggering_init => 20
+      )
+  port map(
+      rstn     => rstn,
+      clk      => clkm,
+      apbi_i   => apbi(psidx_safede),
+      apbo_o   => apbo(psidx_safede),
+      icnt1_i  => icnt1, 
+      icnt2_i  => icnt2, 
+      stall1_o => lockstep_stall1,
+      stall2_o => lockstep_stall2
+      );
+
+\end{lstlisting}
+
+\end{document}
+

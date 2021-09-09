@@ -1,0 +1,36 @@
+\section{Configuration options}
+\label{confg_chap}
+Table \ref{generics} shows the configuration parameters (VDHL generics) exposed by \textit{apb\_wrapper.vhd}. 
+\\
+\begin{table}[H]
+	\caption{Configuration options (VHDL ports)}
+	\label{generics}
+	\centering
+	\begin{small}
+		\begin{tabular}{|l|p{6cm}|l|l|}
+			\hline
+			\textbf{Generic} & \textbf{Function}  & \textbf{Allowed range}  & \textbf{Default}\\
+			\hline
+			PADDR  & APB base address &0 to 16\#fff\# & 0\\
+			\hline
+			PMASK  & APB address mask &0 to 16\#fff\# & 16\#fff\#\\
+			\hline
+			PINDEX & APB slave index &0 to 16\#fff\# & 16\#fff\#\\
+			\hline
+			PIRQ   & APB interrupt index &0 to 16\#fff\# & 16\#fff\#\\
+			\hline
+			LANES\_NUMBER & Lanes of the processor & 1 to 5 & 2\\
+			\hline
+                        REGISTER\_OUTPUT & Number of registers at the stall ouput signals (if 0 no registers) & - & 0 \\
+			\hline
+			REGISTER\_INPUT & Number of registers at the icnt input signals (if 0 no registers) & - & 0 \\
+			\hline
+			MIN\_STAGGERING\_INIT & If the minimum staggering threshold is not changed through the software, its value will be this parameter& 5 to 32740 & 20 \\
+			\hline
+                        EN\_CYCLES\_LIMIT & Maximum number of cycles allowed between setting to 1 one of the critical section registers \ref{critical1} \ref{critical2} and the other before raising an interrupt & ALL & 500 \\
+			\hline
+		\end{tabular}
+	\end{small}
+\end{table}
+
+\hspace{2cm}

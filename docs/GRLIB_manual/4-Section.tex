@@ -1,0 +1,105 @@
+\newpage
+\section{Operation}
+\label{operation_chap}
+\subsection{General}
+SafeDE is controlled through three internal registers:
+
+The output signals used to stall the cores \ref{t_ports} are anded with the bit 30 of the configuration register \ref{cfg0}. If this bit is set to 0, SafeDE will be able to stop neither of the cores. If bit 31 "soft\_reset" is set to 1, all SafeDE registers are set to its reset value except the configuration register. In the same register, there are 15 bits to configure the maximum and the minimum staggering allowed. When the staggering is smaller or bigger than these thresholds, the trail or the head core will be stalled until the staggering is within limits again. If the value of "max\_staggering" is kept to 0, the value of the maximum staggering will be 32750 to avoid overflows. If "min\_staggering" is kept to 0, the value of the maximum staggering will be the value of the VHDL generics min\_staggering\_init explained in table \ref{generics}.
+
+\begin{register}{H}{SafeDE configuration register 0}{0x00}
+	\label{cfg0}
+	\regfield{Soft\_reset}{1}{31}{{0}}
+	\regfield{Global\_enable}{1}{30}{{0}}
+	\regfield{max\_staggering}{15}{15}{{0}}
+	\regfield{min\_staggering}{15}{0}{{0}}
+	\reglabel{Reset value}\regnewline
+\end{register}
+
+To choose the correct value for maximum and minimum staggering is important to take into account the configurations options in section \ref{confg_chap}. If SafeDE is configured to work with a two-lanes core, it means that in each cycle, two instructions can be committed. If we choose a minimum staggering of 15 instructions, that means that each time that the staggering is equal to or smaller than 15, the trail core will be stalled. However, at some point, the staggering could be 16, and the trail core could commit two instructions. In this scenario, the staggering would become 14, and the minimum staggering threshold would be exceeded. Suppose the VHDL generic "register\_output" in table \ref{generics} is set to 1 for timing issues. In that case, the minimum staggering threshold can be exceeded by three instructions instead of one due to the delay between the assertion of the stall signal and the time that it takes effect in the pipeline. In conclusion, depending on the configuration, the threshold can be exceeded by a few instructions. In case a low minimum staggering threshold is chosen, this could cause SafeDE malfunction if the staggering gets 0 or lower.
+
+Apart from the  configuration register, SafeDE has two other registers \ref{critical1} and \ref{critical2}. The function of these registers is to indicate SafeDE that the core has started the critical task. Each core has assigned one critical section register, and it has to set its first bit before starting the critical section. Once the register is set to '1', SafeDE will start counting the executed instructions by that core. In this way, the instructions are counted starting from the same point. It could happen that the write instruction in the "Critical\_section" register had some delay because of the write buffer. Suppose the write buffers of the two cores are not equally filled when the write instruction is fetched. In that case, both cores could execute a different number of instructions, and the staggering computed by SafeDE could vary some instructions from the real value. This can be avoided by reading the critical section register right after writing it (in the next instruction).
+
+\begin{register}{H}{Critical section 1 register 1}{0x04}
+	\label{critical1}
+	\regfield{Reserved}{31}{1}{{X}}
+	\regfield{Critical\_Section1}{1}{0}{{0}}
+	\reglabel{Reset value}\regnewline
+\end{register}
+
+\begin{register}{H}{Critical section 2 register 2}{0x08}
+	\label{critical2}
+	\regfield{Reserved}{31}{1}{{X}}
+	\regfield{Critical\_Section2}{1}{0}{{0}}
+	\reglabel{Reset value}\regnewline
+\end{register}
+
+It doesn't matter which core enters first the critical section (core1 or core2). The first core entering the critical section will take the role of head core and vice-versa. A mechanism also raises an interrupt if one core enters its critical section and the other doesn't. VHDL generic EN\_CYCLES\_LIMIT described in table \ref{generics} determine how many cycles can elapse between one core and the other enter their critical section.
+
+
+
+
+
+\newpage
+\subsection{Statistics}
+
+In addition to the configuration registers, SafeDE also has some registers that store statistics of the execution for debug purpuses. All these registers are shown in figure \ref{fig:reg_statistics}.
+
+\begin{figure}[H]
+	\begin{center}
+		\regfieldb{0x0c}{32}{0}
+		\reglabelb{Total cyles active} \\
+		\regfieldb{0x10}{32}{0}
+		\reglabelb{Executed instructions core1} \\
+		\regfieldb{0x14}{32}{0}
+		\reglabelb{Executed instructions core2} \\
+		\regfieldb{0x18}{32}{0}
+		\reglabelb{Times stalled core1} \\
+		\regfieldb{0x1c}{32}{0}
+		\reglabelb{Times stalled core2} \\
+		\regfieldb{0x20}{32}{0}
+		\reglabelb{Cycles stalled core1} \\
+		\regfieldb{0x24}{32}{0}
+		\reglabelb{Cycles stalled core2} \\
+		\regfieldb{0x28}{32}{0}
+		\reglabelb{Maximum staggering} \\
+		\regfieldb{0x2c}{32}{0}
+		\reglabelb{Accumulated staggering} \\
+		\regfieldb{0x30}{32}{0}
+		\reglabelb{Minimum staggering} \\
+		\end{center}
+	\caption{Statistics registers}\label{fig:reg_statistics}
+\end{figure}
+
+The maximum staggering register (0x28) stores the maximum staggering achieved during the execution. The minimum staggering register (0x30) stores the minimum staggering achieved during the execution. However, this register is only updated once both cores have entered the critical section and the staggering is equal to or bigger than the minimum threshold. Each cycle is added to the value of the Accumulated staggering register (0x2C) the value of the staggering. The average staggering can be derived by dividing the value of this register by the number of cycles active.
+
+All statistic registers except the minimum staggering register are updated once one core has entered its critical section (head core) and until the head core has finished its critical section. To reset these registers, the soft\_reset bit in the configuration register \ref{cfg0} has to be set to 1. None of these registers have any mechanism to prevent overflow.
+
+\hspace{1cm}
+
+
+
+\subsection{Software support}
+
+The unit can be configured by the user at a low level following the description of previous sections. In addition we provide a small bare-metal driver under the path \\ \textit{grlib/software/noelv/BSC\_tests/BSC\_libraries/light-lockstep}.
+
+The driver is composed of three files.
+\begin{itemize}
+\item \textit{lightlock\_vars.h}: Defines a set of constants with the RTL parameters and the memory position of the lockstep within the memory map of the SoC.
+\item \textit{lightlock.h}: It contains the prototypes of each function of the driver.
+\item \textit{lightlock.c}: Contains the definition of each of the functions.
+\end{itemize}
+
+The functions defined in the driver are: 
+\begin{itemize}
+\item \textit{lightlock\_enable()}: Sets to 1 the 31 bit of the configuration register \ref{cfg0}. It has to be called by any core to make SafeDE work.
+\item \textit{lightlock\_disable()}: Sets to 0 the 31 bit of the configuration register \ref{cfg0}. SafeDE won't work independently of the value of the other registers. 
+\item \textit{lightlock\_min\_threshold(int min\_threshold)}: It changes the value of the minimum staggering threshold. 
+\item \textit{lightlock\_min\_max\_thresholds(int min\_threshold, max\_threshold)}: It changes the value of the minimum and the maximum staggering thresholds.
+\item \textit{lightlock\_start\_criticalSec(int core)}: It has to be called right before entering the critical section. The argument of the function must be 1 or 2, for core1 or core2 respectively.
+\item \textit{lightlock\_finish\_criticalSec(int core)}: It has to be called right after finishing the critical section. The argument of the function must be 1 or 2, for core1 or core2 respectively.
+\item \textit{lightlock\_report()}: It prints the values stored in the statistic registers.
+\item \textit{lightlock\_softreset()}: It resets all the registers in the module except the configuration register \ref{cfg0}.
+\end{itemize}
+
+
+\hspace{2cm}
