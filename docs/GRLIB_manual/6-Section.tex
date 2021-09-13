@@ -3,9 +3,9 @@ An example design is provided in the context of De-RISC.
 \\
 \belowcaptionskip=-10pt
 \begin{lstlisting}[label=ins-prot,caption=SafePMU instance example for gpp\_sys,style=vhdl]
--- Include BSC library
-library bsc;
-use bsc.lightlock_module.all;
+-- Include safety library
+library safety;
+use safety.lightlock_module.all;
 
 --Provide non-overlaping APB parameters
 constant psidx_safede : integer := 5;
