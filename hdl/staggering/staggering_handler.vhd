@@ -206,14 +206,15 @@ begin
             if rstn = '0' then
                 r_enable_core1 <= '0'; 
                 r_enable_core2 <= '0'; 
+                core1_ahead_core2 <= '0';
             else 
                 r_enable_core1 <= enable_core1_i;
                 r_enable_core2 <= enable_core2_i;
-            end if;
-            if enable_core1_i = '1' and r_enable_core1 = '0' and enable_core2_i = '0' then
-                core1_ahead_core2 <= '1';
-            elsif enable_core1_i = '0' and r_enable_core2 = '0' and enable_core2_i = '1' then
-                core1_ahead_core2 <= '0';
+                if enable_core1_i = '1' and r_enable_core1 = '0' and enable_core2_i = '0' then
+                    core1_ahead_core2 <= '1';
+                elsif enable_core1_i = '0' and r_enable_core2 = '0' and enable_core2_i = '1' then
+                    core1_ahead_core2 <= '0';
+                end if;
             end if;
         end if;
     end process;
@@ -354,7 +355,7 @@ begin
     --assert (instruction_difference <= unsigned(max_staggering_i) + lanes_number + lanes_number*register_output + lanes_number*register_input - 1) or r_activate_minimum_inst_comp = '0'  report "Maximum threshold condition has been violated" severity error;
     --assert (instruction_difference >= unsigned(min_staggering_i) - lanes_number - lanes_number*register_output - lanes_number*register_input + 1) or r_activate_minimum_inst_comp = '0' report "Minimum threshold condition has been violated" severity error;
     --------------------------------------------------------------------------------------------------------------------------------------------------------
-    assert (r_max_inst_diff <= unsigned(max_staggering_i) + lanes_number + lanes_number*register_output + lanes_number*register_input - 1) report "Maximum threshold condition has been violated: " & integer'image(to_integer(r_max_inst_diff)) & " > " & integer'image(to_integer(unsigned(max_staggering_i)) + lanes_number + lanes_number*register_output + lanes_number*register_input - 1)   severity error;
-    assert (r_min_inst_diff >= unsigned(min_staggering_i) - lanes_number - lanes_number*register_output - lanes_number*register_input + 1) or r_activate_minimum_inst_comp = '0' report "Minimum threshold condition has been violated: " & integer'image(to_integer(r_min_inst_diff)) & " < " & integer'image(to_integer(unsigned(min_staggering_i)) - lanes_number - lanes_number*register_output - lanes_number*register_input + 1) severity error;
+    assert (r_max_inst_diff <= unsigned(max_staggering_i) + lanes_number + lanes_number*register_output + lanes_number*register_input - 1) or enable /= '1' report "Maximum threshold condition has been violated: " & integer'image(to_integer(r_max_inst_diff)) & " > " & integer'image(to_integer(unsigned(max_staggering_i)) + lanes_number + lanes_number*register_output + lanes_number*register_input - 1)   severity error;
+    assert (r_min_inst_diff >= unsigned(min_staggering_i) - lanes_number - lanes_number*register_output - lanes_number*register_input + 1) or enable /= '1' or r_activate_minimum_inst_comp = '0' report "Minimum threshold condition has been violated: " & integer'image(to_integer(r_min_inst_diff)) & " < " & integer'image(to_integer(unsigned(min_staggering_i)) - lanes_number - lanes_number*register_output - lanes_number*register_input + 1) severity error;
 end;
 
