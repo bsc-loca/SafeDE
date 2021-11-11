@@ -5,6 +5,7 @@ image: localhost:5000/spyglass_centos8
 # All the stages will be executed in this order
 stages:
     - linting
+    - sim
 
 variables:
   GIT_SUBMODULE_STRATEGY: recursive
@@ -27,5 +28,23 @@ linting_spyglass:
     expire_in: 30 days
   script:
     - echo "lint_spyglass"
-    - make "docker_spyglass"    # This is a fake call inside the Makefile, just and example
+    - make "docker_spyglass" 
+  allow_failure: false
+
+# =========== STAGE ===========
+#   - sim
+# =============================
+questa:
+  image: localhost:5000/questa_ubuntu:latest
+  stage: sim 
+  tags:
+    - questa 
+  artifacts:
+    paths:
+      - ./ci/.questa.log
+    when: always
+    expire_in: 30 days
+  script:
+    - echo "Questa TB"
+    - make "questa" 
   allow_failure: false
