@@ -278,7 +278,11 @@ begin
     process
     begin
         wait for 1 ns;
-        assert (error_from_sh = '0') report "Result: one core is hung" severity warning;
+        assert (error_from_sh = '0') report "Result: one core got hung: core1" severity warning;
+        -- Show the error just once 
+        if error_from_sh = '1' then
+            wait;
+        end if;
     end process;
     -- pragma translate_on
     
