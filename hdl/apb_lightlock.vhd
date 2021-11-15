@@ -278,7 +278,7 @@ begin
     process
     begin
         wait for 1 ns;
-        assert (error_from_sh = '0') report "Result: error detected by lockstep" severity warning;
+        assert (error_from_sh = '0') report "Result: one core is hung" severity warning;
     end process;
     -- pragma translate_on
     
