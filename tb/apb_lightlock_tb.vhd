@@ -15,8 +15,8 @@ architecture rtl of apb_lightlock_tb is
 
     -- Generics definitions
     constant lanes_number : integer := 2;
-    constant register_output     : integer := 0;   
-    constant register_input      : integer := 0;   
+    constant register_output     : integer := 0;   -- TODO: adapt it for a value different than 0
+    constant register_input      : integer := 0;   -- TODO: adapt it for a value different than 0
     constant en_cycles_limit     : integer := 500; 
     constant min_staggering_init : integer := 20;   
 
@@ -61,19 +61,21 @@ architecture rtl of apb_lightlock_tb is
     end component;
 
 
-    -- Procedure to write in the APB bus
+    -- Procedure to read in the APB bus
     procedure apb_read(
-            constant addr   : in integer;
-            constant print  : in string(1 to 30);
-            signal compare_value : in unsigned(31 downto 0);
+            constant addr   : in integer;                                 -- Bus address to read from
+            constant print  : in string(1 to 30);                         -- Message to print before printing the data read
+            signal compare_value : in unsigned(31 downto 0);              -- Value to compare with the data read (if not equal an error is raised
+            -- apb signals
             signal apbo_prdata  : in std_logic_vector(31 downto 0);
             signal apbi_psel    : out std_logic;
             signal apbi_penable : out std_logic;
             signal apbi_pwrite  : out std_logic;
             signal apbi_paddr   : out std_logic_vector(31 downto 0);
             signal apbi_pwdata  : out std_logic_vector(31 downto 0);
-            signal data : out std_logic_vector(31 downto 0)) is
+            signal data : out std_logic_vector(31 downto 0)) is           -- This signal is equal to the read data during once cycle
         begin
+            -- First cycle
             apbi_penable <= '0';
             apbi_psel <= '1';
             apbi_paddr <= std_logic_vector(to_unsigned(addr, 32));
@@ -81,9 +83,11 @@ architecture rtl of apb_lightlock_tb is
             apbi_pwdata <= (others => '0');
             data <= (others => '0');
             wait for 10 ns;
+            -- Second cycle
             apbi_penable <= '1';
             data <= apbo_prdata;
             wait for 10 ns;
+            -- Third cycle
             report print & integer'image(to_integer(unsigned(apbo_prdata))) & " =? " & integer'image(to_integer(compare_value)) severity note;
             assert compare_value = unsigned(apbo_prdata) report print & "Lightlock register value = " & integer'image(to_integer(unsigned(apbo_prdata))) & " does not match the value of the testbench = " & integer'image(to_integer(compare_value)) severity error;
             apbi_penable <= '0';
@@ -93,10 +97,11 @@ architecture rtl of apb_lightlock_tb is
         end apb_read;
             
 
-    -- Procedure to read in the APB bus
+    -- Procedure to write in the APB bus
     procedure apb_write(
-           constant addr   : in integer;
-           constant data   : in std_logic_vector(31 downto 0);
+           constant addr   : in integer;                                      -- Bus address to write in
+           constant data   : in std_logic_vector(31 downto 0);                -- Data to write
+           -- APB signals
            signal apbo_prdata  : in std_logic_vector(31 downto 0);
            signal apbi_psel    : out std_logic;
            signal apbi_penable : out std_logic;
@@ -104,14 +109,17 @@ architecture rtl of apb_lightlock_tb is
            signal apbi_paddr   : out std_logic_vector(31 downto 0);
            signal apbi_pwdata  : out std_logic_vector(31 downto 0)) is
        begin
+           -- First cycle
            apbi_penable <= '0';
            apbi_psel <= '1';
            apbi_paddr <= std_logic_vector(to_unsigned(addr, 32));
            apbi_pwrite <= '1';
            apbi_pwdata <= data;
            wait for 10 ns;
+           -- Second cycle
            apbi_penable <= '1';
            wait for 10 ns;
+           -- Third cycle
            apbi_pwdata <= (others => '0');
            apbi_penable <= '0';
            apbi_psel <= '0';
@@ -187,7 +195,7 @@ begin
 
 
     -------------------------------------------------------------------------------------------------------------------------
-    -- CALCULATE STADISTICS TO COMPARE THEM WITH THE VALUES OF THE LOCKSTEP
+    -- CALCULATE STATISTICS TO COMPARE THEM WITH THE VALUES OF THE LOCKSTEP
     -------------------------------------------------------------------------------------------------------------------------
      process(clk)
      begin
@@ -339,6 +347,8 @@ begin
     end process;
 
     -- icnt generation
+    -- It generates them randomly
+    -- TODO: adapt it for more lanes
     icnt_generation : inst_count_sim 
     port map(
         clk      => clk,         
