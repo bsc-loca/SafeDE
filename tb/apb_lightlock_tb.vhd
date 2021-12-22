@@ -4,6 +4,7 @@ use ieee.numeric_std.all;
 use ieee.math_real.all;
 library safety;
 use safety.lightlock_pkg.all;
+use std.env.stop;
 
 
 entity apb_lightlock_tb is
@@ -454,6 +455,8 @@ begin
         ------------------------------------------------------------------------------------------------------------
 
         report "Test finished";
+        stop;
+        
         -- report "Test finished" severity error;
         -- assert 1 = 2  report "Test finished." severity failure;
         wait;

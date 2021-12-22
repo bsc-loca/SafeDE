@@ -22,3 +22,4 @@ The compilation and execution of the test is controlled by means of a Makefile. 
 
 
 
+To finish the testbench, we use the stop procedure which is imported from the STD.ENV package. To work, the testbench has to be compiled in VHDL-2008 or newer. If this is not possible, the time of the simulation can be controlled executing `vsim -voptargs=+acc apb_lightlock_tb -do "run simulation_time"` when launching the simulation.
