@@ -1,3 +1,22 @@
+-----------------------------------------------------------------------------------------------------------------------------------------------
+--
+--   Project              :  SafeDE
+--   File name            :  lightlock_pkg.vhd
+--   Title                :  lightlock_pkg
+--   Description          :  Pakage containing the all the component and type definitions used in SafeDE module
+--   Design library       :  None
+--   Analysis dependency  :  None
+--   Initialization       :  Initialized by RESET
+--   Notes                :  None
+--   Simulator(s)         :  QuestaSim-64 10.7c
+-----------------------------------------------------------------------------------------------------------------------------------------------
+--    Revisions :
+--           Date           Author        Revision             Comments
+--        04/30/2022     Francisco Bas      1.0         Finished first version
+--                       francisco.basjalon@bsc.es
+-----------------------------------------------------------------------------------------------------------------------------------------------
+
+
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.math_real.all;

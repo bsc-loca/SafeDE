@@ -1,3 +1,22 @@
+-----------------------------------------------------------------------------------------------------------------------------------------------
+--
+--   Project              :  SafeDE
+--   File name            :  staggering_handler.vhd
+--   Title                :  staggering_handler
+--   Description          :  This component counts the executed instructions by each core, compares the executed instructions, and stops the 
+--                           corresponding core by asserting its stall signal if the staggering becomes too high or too small.
+--   Design library       :  safety
+--   Analysis dependency  :  safety
+--   Initialization       :  Initialized by RESET
+--   Notes                :  None
+--   Simulator(s)         :  QuestaSim-64 10.7c
+-----------------------------------------------------------------------------------------------------------------------------------------------
+--    Revisions :
+--           Date           Author        Revision             Comments
+--        04/30/2022     Francisco Bas      1.0         Finished first version
+--                       francisco.basjalon@bsc.es
+-----------------------------------------------------------------------------------------------------------------------------------------------
+
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
