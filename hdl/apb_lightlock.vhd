@@ -1,3 +1,22 @@
+-----------------------------------------------------------------------------------------------------------------------------------------------
+--
+--   Project              :  SafeDE
+--   File name            :  apb_lightlock.vhd
+--   Title                :  apb_lightlock
+--   Description          :  This is the top of the light-lockstep. This component should be instanciated inside an APB wrapper.
+--   Design library       :  safety
+--   Analysis dependency  :  safety
+--   Initialization       :  Initialized by RESET
+--   Notes                :  None
+--   Simulator(s)         :  QuestaSim-64 10.7c
+-----------------------------------------------------------------------------------------------------------------------------------------------
+--    Revisions :
+--           Date           Author        Revision             Comments
+--        04/30/2022     Francisco Bas      1.0         Finished first version
+--                       francisco.basjalon@bsc.es
+-----------------------------------------------------------------------------------------------------------------------------------------------
+
+
 library ieee; 
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
