@@ -1,5 +1,5 @@
 #include <stdio.h>
-#include <lightlock.h>
+#include <SafeDE_driver.h>
 //#define __LOCKSTEP_DEBUG__ 1
 #define __RISCV__ 0
 
@@ -39,7 +39,7 @@ static inline __attribute__((always_inline)) unsigned int read (unsigned int ent
 
 //It enables SafeDE module
 //If it is disable neither of the stall signals can be set to 1
-void lightlock_enable() {
+void SafeDE_enable() {
     unsigned int reg;
     reg = read(LOCKSTEP_CONFIG);
     reg |= (1 << 30);
@@ -47,7 +47,7 @@ void lightlock_enable() {
 }
 
 //It disables SafeDE module
-void lightlock_disable() {
+void SafeDE_disable() {
     unsigned int reg;
     reg = read(LOCKSTEP_CONFIG);
     reg &= ~(1 << 30);
@@ -56,7 +56,7 @@ void lightlock_disable() {
 
 //It sets minimum and maximum staggering (minimum and maximum threshold) 
 //Difference between max and min threshold has to be 4 at least
-void lightlock_min_max_thresholds(int min_staggering, int max_staggering) {
+void SafeDE_min_max_thresholds(int min_staggering, int max_staggering) {
     unsigned int reg;
     if (min_staggering > max_staggering) {
         printf("\nERROR: minimum threshold is bigger than maximum threshold. Lockstep will remain off\n");
@@ -79,7 +79,7 @@ void lightlock_min_max_thresholds(int min_staggering, int max_staggering) {
 
 //It sets minimum staggering (minimum threshold only)
 //Mximum staggering is set to its maximum value (32767) to avoid overflow
-void lightlock_min_threshold(int min_staggering) {
+void SafeDE_min_threshold(int min_staggering) {
     unsigned int reg;
     if (min_staggering > 32767) {
         printf("\nERROR: minimum threshol is too big. Biggest possible value is 32767. Lockstep will remain off\n");
@@ -107,7 +107,7 @@ void lightlock_min_threshold(int min_staggering) {
 //If the preprocessor variable __RISCV__ is set to 1, the assembly code for the RISCV processor
 //will be used. If the target core is not RISCV, __RISCV__ must be set to 0. In that case
 //cores won't be perfectly synchronized.
-void lightlock_start_criticalSec(int core) {
+void SafeDE_start_criticalSec(int core) {
     unsigned long int address;
     if (core != 1 && core !=2) {
         printf("\nERROR: The last argument of the function must be 1 or 2.\n");
@@ -153,7 +153,7 @@ void lightlock_start_criticalSec(int core) {
 
 
 //Each core has to call this function rigth before ending the critical secion
-void lightlock_finish_criticalSec(int core) {
+void SafeDE_finish_criticalSec(int core) {
     if (core != 1 && core !=2) {
         printf("\nThe argument of the function must be 1 or 2.\n");
     } else {
@@ -166,7 +166,7 @@ void lightlock_finish_criticalSec(int core) {
 
 
 //It prints the content of the statistics registers
-void lightlock_report(void) {
+void SafeDE_report(void) {
     unsigned int staggering;
     int min_staggering;
     int max_staggering;
@@ -203,7 +203,7 @@ void lightlock_report(void) {
 }
 
 //It sets to 0 all the counters of the lockstep and resets the module
-void lightlock_softreset(void) {
+void SafeDE_softreset(void) {
     unsigned int reg;
     reg = read(LOCKSTEP_CONFIG);
     reg |= 1 << 31;
