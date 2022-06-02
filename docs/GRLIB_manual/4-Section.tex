@@ -91,14 +91,14 @@ The driver is composed of three files.
 
 The functions defined in the driver are: 
 \begin{itemize}
-\item \textit{lightlock\_enable()}: Sets to 1 the 31 bit of the configuration register \ref{cfg0}. It has to be called by any core to make SafeDE work.
-\item \textit{lightlock\_disable()}: Sets to 0 the 31 bit of the configuration register \ref{cfg0}. SafeDE won't work independently of the value of the other registers. 
-\item \textit{lightlock\_min\_threshold(int min\_threshold)}: It changes the value of the minimum staggering threshold. 
-\item \textit{lightlock\_min\_max\_thresholds(int min\_threshold, max\_threshold)}: It changes the value of the minimum and the maximum staggering thresholds.
-\item \textit{lightlock\_start\_criticalSec(int core)}: It has to be called right before entering the critical section. The argument of the function must be 1 or 2, for core1 or core2 respectively.
-\item \textit{lightlock\_finish\_criticalSec(int core)}: It has to be called right after finishing the critical section. The argument of the function must be 1 or 2, for core1 or core2 respectively.
-\item \textit{lightlock\_report()}: It prints the values stored in the statistic registers.
-\item \textit{lightlock\_softreset()}: It resets all the registers in the module except the configuration register \ref{cfg0}.
+\item \textit{SafeDE\_enable()}: Sets to 1 the 31 bit of the configuration register \ref{cfg0}. It has to be called by any core to make SafeDE work.
+\item \textit{SafeDE\_disable()}: Sets to 0 the 31 bit of the configuration register \ref{cfg0}. SafeDE won't work independently of the value of the other registers. 
+\item \textit{SafeDE\_min\_threshold(int min\_threshold)}: It changes the value of the minimum staggering threshold. 
+\item \textit{SafeDE\_min\_max\_thresholds(int min\_threshold, max\_threshold)}: It changes the value of the minimum and the maximum staggering thresholds.
+\item \textit{SafeDE\_start\_criticalSec(int core)}: It has to be called right before entering the critical section. The argument of the function must be 1 or 2, for core1 or core2 respectively.
+\item \textit{SafeDE\_finish\_criticalSec(int core)}: It has to be called right after finishing the critical section. The argument of the function must be 1 or 2, for core1 or core2 respectively.
+\item \textit{SafeDE\_report()}: It prints the values stored in the statistic registers.
+\item \textit{SafeDE\_softreset()}: It resets all the registers in the module except the configuration register \ref{cfg0}.
 \end{itemize}
 
 
