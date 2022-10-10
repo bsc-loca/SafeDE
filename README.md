@@ -5,7 +5,7 @@ For more information please check the `docs` directory, in particular the [main.
 
 ## Reference
 
-If you are using the SafeDE IP for an academic publication, please cite the following paper:
+If you are using the SafeDE IP for an academic publication, please cite the following papers:
 
 F. Bas, S. Alcaide, G. Cabo, P. Benedicte and J. Abella, "SafeDE: A Low-Cost Hardware Solution to Enforce Diverse Redundancy in Multicores," in IEEE Transactions on Device and Materials Reliability, vol. 22, no. 2, pp. 111-119, June 2022, doi: 10.1109/TDMR.2022.3156799.
 
@@ -21,6 +21,17 @@ F. Bas, S. Alcaide, G. Cabo, P. Benedicte and J. Abella, "SafeDE: A Low-Cost Har
   doi={10.1109/TDMR.2022.3156799}}
 ```
 
+F. Bas et al., "SafeDE: a flexible Diversity Enforcement hardware module for light-lockstepping," 2021 IEEE 27th International Symposium on On-Line Testing and Robust System Design (IOLTS), 2021, pp. 1-7, doi: 10.1109/IOLTS52814.2021.9486715.
+
+```
+@INPROCEEDINGS{9486715,
+  author={Bas, Francisco and Alcaide, Sergi and Lorenzo, Ruben and Cabo, Guillem and Gil, Guillermo and Sala, Oriol and Mazzocchetti, Fabio and Trilla, David and Abella, Jaume},
+  booktitle={2021 IEEE 27th International Symposium on On-Line Testing and Robust System Design (IOLTS)}, 
+  title={SafeDE: a flexible Diversity Enforcement hardware module for light-lockstepping}, 
+  year={2021},
+  pages={1-7},
+  doi={10.1109/IOLTS52814.2021.9486715}}
+```
 
 ## Repo Organization
 
